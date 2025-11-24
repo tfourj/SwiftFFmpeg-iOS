@@ -31,19 +31,23 @@ log "Patching ffmpeg.c..."
 # and insert the reset function after it
 
 PATCH_MARKER="static int64_t copy_ts_first_pts = AV_NOPTS_VALUE;"
-RESET_FUNCTION='
+
+# Create a temporary file with the reset function
+RESET_FUNC_FILE=$(mktemp)
+cat > "$RESET_FUNC_FILE" << 'RESET_FUNC_EOF'
+
 // Reset all global state for re-entrant calls (iOS library usage)
 void ffmpeg_reset(void)
 {
     // Reset static variables
     received_sigterm = 0;
     received_nb_signals = 0;
-    atomic_store(\&transcode_init_done, 0);
+    atomic_store(&transcode_init_done, 0);
     ffmpeg_exited = 0;
     copy_ts_first_pts = AV_NOPTS_VALUE;
     
     // Reset atomic counter
-    atomic_store(\&nb_output_dumped, 0);
+    atomic_store(&nb_output_dumped, 0);
     
     // Reset global counters (arrays are freed by ffmpeg_cleanup, just reset counts)
     nb_input_files = 0;
@@ -61,17 +65,17 @@ void ffmpeg_reset(void)
     vstats_file = NULL;
     progress_avio = NULL;
 }
-'
+RESET_FUNC_EOF
 
-# Use awk to insert the function after the marker line
-awk -v marker="$PATCH_MARKER" -v func="$RESET_FUNCTION" '
-{
-    print
-    if (index($0, marker) > 0) {
-        print func
-    }
-}
-' "$FFMPEG_C.orig" > "$FFMPEG_C"
+# Use sed to insert the function after the marker line
+# On macOS, sed -i requires a backup extension (use '' for no backup)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  sed -i '' "/$PATCH_MARKER/r $RESET_FUNC_FILE" "$FFMPEG_C"
+else
+  sed -i "/$PATCH_MARKER/r $RESET_FUNC_FILE" "$FFMPEG_C"
+fi
+
+rm "$RESET_FUNC_FILE"
 
 # Verify patch was applied
 if ! grep -q "ffmpeg_reset" "$FFMPEG_C"; then
@@ -90,18 +94,23 @@ log "Patching ffmpeg.h..."
 
 # Find "void term_exit(void);" and add declaration after it
 HEADER_MARKER="void term_exit(void);"
-HEADER_DECL="
-// Reset all global state for re-entrant calls (iOS library usage)
-void ffmpeg_reset(void);"
 
-awk -v marker="$HEADER_MARKER" -v decl="$HEADER_DECL" '
-{
-    print
-    if (index($0, marker) > 0) {
-        print decl
-    }
-}
-' "$FFMPEG_H.orig" > "$FFMPEG_H"
+# Create a temporary file with the header declaration
+HEADER_DECL_FILE=$(mktemp)
+cat > "$HEADER_DECL_FILE" << 'HEADER_DECL_EOF'
+
+// Reset all global state for re-entrant calls (iOS library usage)
+void ffmpeg_reset(void);
+HEADER_DECL_EOF
+
+# Use sed to insert the declaration after the marker line
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  sed -i '' "/$HEADER_MARKER/r $HEADER_DECL_FILE" "$FFMPEG_H"
+else
+  sed -i "/$HEADER_MARKER/r $HEADER_DECL_FILE" "$FFMPEG_H"
+fi
+
+rm "$HEADER_DECL_FILE"
 
 # Verify patch was applied
 if ! grep -q "ffmpeg_reset" "$FFMPEG_H"; then
@@ -116,4 +125,3 @@ log "Successfully patched ffmpeg.h"
 # rm "$FFMPEG_C.orig" "$FFMPEG_H.orig"
 
 log_section "All patches applied successfully"
-
