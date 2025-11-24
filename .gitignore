@@ -1,0 +1,8 @@
+/build
+/install
+/umbrella
+ffmpeg/
+/FFmpeg.xcframework
+/lame
+.DS_Store
+Scripts/.DS_Store
