@@ -82,8 +82,8 @@ build_lame_arch() {
     CXXFLAGS="-arch $ARCH -isysroot $SDK -mios-version-min=$MIN_IOS_VERSION -target $TARGET_TRIPLE" \
     LDFLAGS="-arch $ARCH -isysroot $SDK -mios-version-min=$MIN_IOS_VERSION -target $TARGET_TRIPLE"
   
-  make -j"$NUM_JOBS"
-  make install
+  make_with_report -j"$NUM_JOBS"
+  make_with_report install
   
   log "LAME built successfully for $ARCH / $PLATFORM"
 }

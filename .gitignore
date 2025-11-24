@@ -4,5 +4,6 @@
 ffmpeg/
 /FFmpeg.xcframework
 /lame
+build-report.txt
 .DS_Store
 Scripts/.DS_Store

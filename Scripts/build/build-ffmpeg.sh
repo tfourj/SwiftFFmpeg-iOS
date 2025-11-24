@@ -74,8 +74,8 @@ build_ffmpeg_arch() {
     --extra-cflags="$LAME_CFLAGS" \
     --extra-ldflags="$LAME_LDFLAGS -lpthread"
 
-  make -j"$NUM_JOBS"
-  make install
+  make_with_report -j"$NUM_JOBS"
+  make_with_report install
 
   # Build CLI library
   build_cli_library "$ARCH" "$PLATFORM" "$PREFIX" "$BUILD_SUBDIR" "$SDK" "$TARGET_TRIPLE" "$CC"

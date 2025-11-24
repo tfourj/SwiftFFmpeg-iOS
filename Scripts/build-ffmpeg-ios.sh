@@ -24,6 +24,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/config.sh"
 
+# Initialize build report
+init_report
+
 # Parse command line arguments
 CLEAN_BUILD=true
 BUILD_LAME=true
@@ -98,3 +101,6 @@ fi
 
 log_section "Build Complete"
 log "FFmpeg.xcframework is at: $XCFRAMEWORK_PATH"
+
+# Finalize report
+finalize_report

@@ -63,6 +63,9 @@ try SwiftFFmpeg.execute([
 ./Scripts/build-ffmpeg-ios.sh --help
 ```
 
+**Build Report:**
+A clean build summary is automatically generated at `build-report.txt` in the project root. This file contains only high-level progress information (section starts, completions, errors) without the verbose compilation output that appears on stdout.
+
 **Build Structure:**
 ```
 Scripts/
