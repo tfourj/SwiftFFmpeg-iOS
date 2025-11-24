@@ -7,3 +7,4 @@ ffmpeg/
 build-report.txt
 .DS_Store
 Scripts/.DS_Store
+/.swiftpm
