@@ -97,10 +97,12 @@ int ffmpeg_execute_with_output(int argc, char *argv[], char *output_buffer, size
         return ffmpeg_execute(argc, argv);
     }
     
-    // Create a temporary file for output
-    char temp_file[] = "/tmp/ffmpeg_output_XXXXXX";
-    int fd = mkstemp(temp_file);
-    if (fd < 0) {
+    // Initialize output buffer
+    output_buffer[0] = '\0';
+    
+    // Create a pipe to capture output
+    int pipefd[2];
+    if (pipe(pipefd) < 0) {
         return ffmpeg_execute(argc, argv);
     }
     
@@ -108,10 +110,10 @@ int ffmpeg_execute_with_output(int argc, char *argv[], char *output_buffer, size
     int stdout_fd = dup(STDOUT_FILENO);
     int stderr_fd = dup(STDERR_FILENO);
     
-    // Redirect stdout and stderr to temp file
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
-    close(fd);
+    // Redirect stdout and stderr to pipe write end
+    dup2(pipefd[1], STDOUT_FILENO);
+    dup2(pipefd[1], STDERR_FILENO);
+    close(pipefd[1]);  // Close write end in parent after dup
     
     // Execute FFmpeg
     ffmpeg_setup_logging_if_needed();
@@ -127,16 +129,18 @@ int ffmpeg_execute_with_output(int argc, char *argv[], char *output_buffer, size
     close(stdout_fd);
     close(stderr_fd);
     
-    // Read output from temp file
-    FILE *fp = fopen(temp_file, "r");
-    if (fp) {
-        size_t bytes_read = fread(output_buffer, 1, output_buffer_size - 1, fp);
-        output_buffer[bytes_read] = '\0';
-        fclose(fp);
+    // Read output from pipe
+    size_t total_read = 0;
+    ssize_t bytes_read;
+    while (total_read < output_buffer_size - 1) {
+        bytes_read = read(pipefd[0], output_buffer + total_read, output_buffer_size - 1 - total_read);
+        if (bytes_read <= 0) break;
+        total_read += bytes_read;
     }
+    output_buffer[total_read] = '\0';
     
-    // Clean up temp file
-    unlink(temp_file);
+    // Close read end of pipe
+    close(pipefd[0]);
     
     return exit_code;
 }
@@ -148,10 +152,12 @@ int ffprobe_execute_with_output(int argc, char *argv[], char *output_buffer, siz
         return ffprobe_execute(argc, argv);
     }
     
-    // Create a temporary file for output
-    char temp_file[] = "/tmp/ffmpeg_output_XXXXXX";
-    int fd = mkstemp(temp_file);
-    if (fd < 0) {
+    // Initialize output buffer
+    output_buffer[0] = '\0';
+    
+    // Create a pipe to capture output
+    int pipefd[2];
+    if (pipe(pipefd) < 0) {
         return ffprobe_execute(argc, argv);
     }
     
@@ -159,10 +165,10 @@ int ffprobe_execute_with_output(int argc, char *argv[], char *output_buffer, siz
     int stdout_fd = dup(STDOUT_FILENO);
     int stderr_fd = dup(STDERR_FILENO);
     
-    // Redirect stdout and stderr to temp file
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
-    close(fd);
+    // Redirect stdout and stderr to pipe write end
+    dup2(pipefd[1], STDOUT_FILENO);
+    dup2(pipefd[1], STDERR_FILENO);
+    close(pipefd[1]);  // Close write end in parent after dup
     
     // Execute ffprobe
     ffmpeg_setup_logging_if_needed();
@@ -178,16 +184,18 @@ int ffprobe_execute_with_output(int argc, char *argv[], char *output_buffer, siz
     close(stdout_fd);
     close(stderr_fd);
     
-    // Read output from temp file
-    FILE *fp = fopen(temp_file, "r");
-    if (fp) {
-        size_t bytes_read = fread(output_buffer, 1, output_buffer_size - 1, fp);
-        output_buffer[bytes_read] = '\0';
-        fclose(fp);
+    // Read output from pipe
+    size_t total_read = 0;
+    ssize_t bytes_read;
+    while (total_read < output_buffer_size - 1) {
+        bytes_read = read(pipefd[0], output_buffer + total_read, output_buffer_size - 1 - total_read);
+        if (bytes_read <= 0) break;
+        total_read += bytes_read;
     }
+    output_buffer[total_read] = '\0';
     
-    // Clean up temp file
-    unlink(temp_file);
+    // Close read end of pipe
+    close(pipefd[0]);
     
     return exit_code;
 }
