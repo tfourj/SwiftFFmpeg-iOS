@@ -91,7 +91,6 @@ public enum SwiftFFmpeg {
     public static func execute(_ arguments: [String], tool: FFmpegTool = .ffmpeg) throws -> (exitCode: Int, output: String) {
         // argv[0] must be some program name
         let programName = tool == .ffmpeg ? "ffmpeg" : "ffprobe"
-        print(programName)
         let allArgs = [programName] + arguments
 
         // Convert [String] to [UnsafeMutablePointer<CChar>?]

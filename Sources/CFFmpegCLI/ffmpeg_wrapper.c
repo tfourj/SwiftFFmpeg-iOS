@@ -19,6 +19,9 @@ int ffprobe_main(int argc, char *argv[]);
 // Reset FFmpeg global state for re-entrant calls
 void ffmpeg_reset(void);
 
+// Set program name for library mode (from patched opt_common.c)
+void set_library_program_name(const char *name);
+
 // FFmpeg logging API
 void av_log_set_callback(void (*callback)(void *ptr, int level, const char *fmt, va_list vl));
 void av_log_set_level(int level);
@@ -76,12 +79,14 @@ static void ffmpeg_setup_logging_if_needed(void) {
 int ffmpeg_execute(int argc, char *argv[]) {
     ffmpeg_setup_logging_if_needed();
     ffmpeg_reset();  // Reset global state before each execution
+    set_library_program_name("ffmpeg");
     return ffmpeg_main(argc, argv);
 }
 
 int ffprobe_execute(int argc, char *argv[]) {
     ffmpeg_setup_logging_if_needed();
     ffmpeg_reset();  // Reset global state before each execution
+    set_library_program_name("ffprobe");
     return ffprobe_main(argc, argv);
 }
 
@@ -111,6 +116,7 @@ int ffmpeg_execute_with_output(int argc, char *argv[], char *output_buffer, size
     // Execute FFmpeg
     ffmpeg_setup_logging_if_needed();
     ffmpeg_reset();  // Reset global state before each execution
+    set_library_program_name("ffmpeg");
     int exit_code = ffmpeg_main(argc, argv);
     
     // Restore stdout/stderr
@@ -158,9 +164,10 @@ int ffprobe_execute_with_output(int argc, char *argv[], char *output_buffer, siz
     dup2(fd, STDERR_FILENO);
     close(fd);
     
-    // Execute FFmpeg
+    // Execute ffprobe
     ffmpeg_setup_logging_if_needed();
     ffmpeg_reset();  // Reset global state before each execution
+    set_library_program_name("ffprobe");
     int exit_code = ffprobe_main(argc, argv);
     
     // Restore stdout/stderr

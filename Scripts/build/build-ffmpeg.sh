@@ -170,6 +170,17 @@ build_cli_library() {
     fi
   fi
   
+  # Recompile opt_common.c with our patched version that supports settable program_name
+  if [ -f "$FFMPEG_SRC_DIR/fftools/opt_common.c" ]; then
+    log "Recompiling opt_common.c with program name patch..."
+    $COMPILER "${COMMON_COMPILE_FLAGS[@]}" \
+      -c "$FFMPEG_SRC_DIR/fftools/opt_common.c" -o "$TEMP_DIR/opt_common.o"
+    
+    if [ ! -f "$TEMP_DIR/opt_common.o" ]; then
+      log "Warning: Failed to compile opt_common.c"
+    fi
+  fi
+  
   # Create the static library
   ar rcs "$PREFIX/lib/libffmpeg_cli.a" "$TEMP_DIR"/*.o
   
