@@ -5,6 +5,103 @@ set -e
 BUILD_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$BUILD_SCRIPT_DIR/../config.sh"
 
+# Get available FFmpeg stable versions from GitHub
+get_ffmpeg_versions() {
+  # Fetch tags from GitHub API (last 20 releases)
+  # Suppress all output except version numbers
+  VERSIONS=$(curl -s "https://api.github.com/repos/FFmpeg/FFmpeg/tags?per_page=20" 2>/dev/null | \
+    grep -o '"name": "n[0-9.]*"' 2>/dev/null | \
+    sed 's/"name": "n\(.*\)"/\1/' 2>/dev/null | \
+    sort -V -r 2>/dev/null | \
+    head -10 2>/dev/null)
+  
+  if [ -z "$VERSIONS" ]; then
+    # Fallback: use known stable versions
+    echo "8.0.1 8.0 7.1.3 7.1.2 7.1.1 7.1 7.0.3 7.0.2 7.0.1 7.0"
+  else
+    echo "$VERSIONS"
+  fi
+}
+
+# Prompt user to select FFmpeg version
+select_ffmpeg_version() {
+  local SELECTED_VERSION=""
+  
+  # Check if version is provided via environment variable
+  if [ -n "$FFMPEG_VERSION" ]; then
+    if [ "$FFMPEG_VERSION" = "latest" ] || [ "$FFMPEG_VERSION" = "git" ]; then
+      echo "git"
+      return
+    else
+      echo "$FFMPEG_VERSION"
+      return
+    fi
+  fi
+  
+  # Check if running non-interactively (no TTY)
+  if [ ! -t 0 ]; then
+    log "Non-interactive mode detected, using latest git"
+    echo "git"
+    return
+  fi
+  
+  # Interactive prompt (send prompts to stderr so stdout only contains version)
+  echo "" >&2
+  echo "Select FFmpeg version to build:" >&2
+  echo "  1) Latest Git (recommended for latest features)" >&2
+  echo "  2) Stable version (choose from list)" >&2
+  echo "" >&2
+  printf "Enter choice [1-2] (default: 1): " >&2
+  read choice < /dev/tty 2>/dev/null || read choice
+  choice=${choice:-1}
+  
+  if [ "$choice" = "1" ]; then
+    echo "git"
+    return
+  fi
+  
+  if [ "$choice" = "2" ]; then
+    # Get versions (suppress any log output)
+    local versions=($(get_ffmpeg_versions 2>/dev/null))
+    local version_input=""
+    
+    if [ ${#versions[@]} -eq 0 ]; then
+      log "Failed to fetch versions, using fallback list"
+      versions=(8.0.1 8.0 7.1.3 7.1.2 7.1.1 7.1 7.0.3 7.0.2 7.0.1 7.0)
+    fi
+    
+    echo "" >&2
+    echo "Available stable versions:" >&2
+    local i=1
+    for version in "${versions[@]}"; do
+      echo "  $i) $version" >&2
+      ((i++))
+    done
+    echo "" >&2
+    printf "Enter version number or version string (e.g., 7.0): " >&2
+    read version_input < /dev/tty 2>/dev/null || read version_input
+    
+    # Check if it's a number (index) or version string
+    if [[ "$version_input" =~ ^[0-9]+$ ]]; then
+      local idx=$((version_input - 1))
+      if [ $idx -ge 0 ] && [ $idx -lt ${#versions[@]} ]; then
+        SELECTED_VERSION="${versions[$idx]}"
+      else
+        log "Invalid selection, using latest git"
+        echo "git"
+        return
+      fi
+    else
+      SELECTED_VERSION="$version_input"
+    fi
+    
+    echo "$SELECTED_VERSION"
+  else
+    log "Invalid choice, using latest git"
+    echo "git"
+  fi
+}
+
 # Download FFmpeg if not present
 download_ffmpeg() {
   if [ -f "$FFMPEG_SRC_DIR/configure" ]; then
@@ -15,24 +112,41 @@ download_ffmpeg() {
   log_section "Downloading FFmpeg source"
   cd "$PROJECT_ROOT"
   
-  if command -v git &> /dev/null; then
-    git clone --depth 1 https://git.ffmpeg.org/ffmpeg.git ffmpeg || {
-      log "Failed to clone FFmpeg. Trying alternative method..."
-      FFMPEG_VERSION="7.0"
-      curl -L "https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n${FFMPEG_VERSION}.tar.gz" -o ffmpeg.tar.gz
-      tar -xzf ffmpeg.tar.gz
-      mv "FFmpeg-n${FFMPEG_VERSION}" ffmpeg
-      rm ffmpeg.tar.gz
-    }
+  # Select version
+  local VERSION=$(select_ffmpeg_version)
+  
+  if [ "$VERSION" = "git" ]; then
+    log "Downloading latest FFmpeg from git..."
+    if command -v git &> /dev/null; then
+      git clone --depth 1 https://git.ffmpeg.org/ffmpeg.git ffmpeg || {
+        log "Failed to clone FFmpeg. Trying GitHub..."
+        git clone --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg || {
+          log "Error: Failed to clone FFmpeg"
+          exit 1
+        }
+      }
+    else
+      log "Error: git is not installed"
+      exit 1
+    fi
   else
-    log "Error: git is not installed"
-    exit 1
+    log "Downloading FFmpeg version $VERSION..."
+    # Download specific version from GitHub
+    curl -L "https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n${VERSION}.tar.gz" -o ffmpeg.tar.gz || {
+      log "Error: Failed to download FFmpeg version $VERSION"
+      exit 1
+    }
+    tar -xzf ffmpeg.tar.gz
+    mv "FFmpeg-n${VERSION}" ffmpeg
+    rm ffmpeg.tar.gz
   fi
   
   if [ ! -f "$FFMPEG_SRC_DIR/configure" ]; then
     log "Error: Failed to obtain FFmpeg source"
     exit 1
   fi
+  
+  log "FFmpeg source downloaded successfully"
 }
 
 # Build FFmpeg for a specific architecture

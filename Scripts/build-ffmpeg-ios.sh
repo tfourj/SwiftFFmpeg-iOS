@@ -17,6 +17,7 @@
 #   --ffmpeg-only   Only build FFmpeg (assumes LAME is already built)
 #   --xcf-only      Only create XCFramework (assumes FFmpeg is already built)
 #   --no-clean      Skip initial clean (for incremental builds)
+#   --version VER   FFmpeg version to build (e.g., "7.0", "git", or "latest")
 #   --help          Show this help message
 #
 set -e
@@ -32,6 +33,7 @@ CLEAN_BUILD=true
 BUILD_LAME=true
 BUILD_FFMPEG=true
 CREATE_XCF=true
+FFMPEG_VERSION=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -62,6 +64,11 @@ while [[ $# -gt 0 ]]; do
       CREATE_XCF=true
       CLEAN_BUILD=false
       shift
+      ;;
+    --version)
+      FFMPEG_VERSION="$2"
+      export FFMPEG_VERSION
+      shift 2
       ;;
     --help|-h)
       head -25 "$0" | tail -17

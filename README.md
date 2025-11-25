@@ -49,7 +49,13 @@ let (exitCode, output) = try SwiftFFmpeg.execute([
 
 ```bash
 # Full build (clean + LAME + FFmpeg + XCFramework)
+# Will prompt to select FFmpeg version (Git or stable)
 ./Scripts/build-ffmpeg-ios.sh
+
+# Build with specific version (non-interactive)
+./Scripts/build-ffmpeg-ios.sh --version git          # Latest Git
+./Scripts/build-ffmpeg-ios.sh --version 7.0          # Stable version 7.0
+./Scripts/build-ffmpeg-ios.sh --version latest        # Latest Git (alias)
 
 # Incremental build (skip cleaning)
 ./Scripts/build-ffmpeg-ios.sh --no-clean
@@ -62,6 +68,13 @@ let (exitCode, output) = try SwiftFFmpeg.execute([
 # Show help
 ./Scripts/build-ffmpeg-ios.sh --help
 ```
+
+**Version Selection:**
+- When run interactively, you'll be prompted to choose between:
+  - **Latest Git** (recommended) - Most up-to-date with latest features
+  - **Stable version** - Choose from a list of recent stable releases (e.g., 7.0, 6.1, etc.)
+- Use `--version` flag to skip the prompt and specify directly
+- Non-interactive builds (CI/CD) default to latest Git
 
 **Build Report:**
 A clean build summary is automatically generated at `build-report.txt` in the project root. This file contains only high-level progress information (section starts, completions, errors) without the verbose compilation output that appears on stdout.
