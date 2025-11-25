@@ -79,6 +79,12 @@ int ffmpeg_execute(int argc, char *argv[]) {
     return ffmpeg_main(argc, argv);
 }
 
+int ffprobe_execute(int argc, char *argv[]) {
+    ffmpeg_setup_logging_if_needed();
+    ffmpeg_reset();  // Reset global state before each execution
+    return ffprobe_main(argc, argv);
+}
+
 // --- Execute with output capture ---
 
 int ffmpeg_execute_with_output(int argc, char *argv[], char *output_buffer, size_t output_buffer_size) {
@@ -129,18 +135,18 @@ int ffmpeg_execute_with_output(int argc, char *argv[], char *output_buffer, size
     return exit_code;
 }
 
-// --- Execute ffprobe ---
+// --- Execute ffprobe with output capture ---
 
-int ffprobe_execute(int argc, char *argv[], char *output_buffer, size_t output_buffer_size) {
+int ffprobe_execute_with_output(int argc, char *argv[], char *output_buffer, size_t output_buffer_size) {
     if (!output_buffer || output_buffer_size == 0) {
-        return -1;
+        return ffprobe_execute(argc, argv);
     }
     
     // Create a temporary file for output
-    char temp_file[] = "/tmp/ffprobe_output_XXXXXX";
+    char temp_file[] = "/tmp/ffmpeg_output_XXXXXX";
     int fd = mkstemp(temp_file);
     if (fd < 0) {
-        return -1;
+        return ffprobe_execute(argc, argv);
     }
     
     // Save original stdout/stderr
@@ -152,7 +158,9 @@ int ffprobe_execute(int argc, char *argv[], char *output_buffer, size_t output_b
     dup2(fd, STDERR_FILENO);
     close(fd);
     
-    // Execute ffprobe
+    // Execute FFmpeg
+    ffmpeg_setup_logging_if_needed();
+    ffmpeg_reset();  // Reset global state before each execution
     int exit_code = ffprobe_main(argc, argv);
     
     // Restore stdout/stderr

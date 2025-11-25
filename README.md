@@ -34,8 +34,8 @@ Drag `FFmpeg.xcframework` into your Xcode project and set to **Embed & Sign**
 ```swift
 import SwiftFFmpeg
 
-// Run any FFmpeg command
-try SwiftFFmpeg.execute([
+// Run any FFmpeg command (always captures output)
+let (exitCode, output) = try SwiftFFmpeg.execute([
     "-i", "input.mp4",
     "-c:v", "copy",
     "-c:a", "aac",
@@ -88,11 +88,12 @@ Scripts/
 import SwiftFFmpeg
 
 do {
-    try SwiftFFmpeg.execute([
+    let (exitCode, output) = try SwiftFFmpeg.execute([
         "-i", inputPath,
         "-c", "copy",
         outputPath
     ])
+    print("Conversion completed with exit code: \(exitCode)")
 } catch SwiftFFmpegError.executionFailed(let code) {
     print("FFmpeg failed with code: \(code)")
 }
@@ -101,14 +102,51 @@ do {
 ### Get FFmpeg Version
 
 ```swift
-let (_, output) = try SwiftFFmpeg.executeWithOutput(["-version"])
+// Using ffmpeg (default)
+let (_, output) = try SwiftFFmpeg.execute(["-version"], tool: .ffmpeg)
 print(output)
+
+// Or simply (defaults to .ffmpeg)
+let (_, version) = try SwiftFFmpeg.execute(["-version"])
+print(version)
+```
+
+### Using ffprobe
+
+```swift
+// Get ffprobe version
+let (_, version) = try SwiftFFmpeg.execute(["-version"], tool: .ffprobe)
+print(version)
+
+// Get media format information
+let (_, formatInfo) = try SwiftFFmpeg.execute(
+    ["-v", "error", "-show_format", "video.mp4"],
+    tool: .ffprobe
+)
+print(formatInfo)
+
+// Get stream information
+let (_, streamInfo) = try SwiftFFmpeg.execute(
+    ["-v", "error", "-show_streams", "-of", "json", "video.mp4"],
+    tool: .ffprobe
+)
+print(streamInfo)
+
+// Get media duration
+let (_, durationStr) = try SwiftFFmpeg.execute(
+    ["-v", "error", "-show_entries", "format=duration",
+     "-of", "default=noprint_wrappers=1:nokey=1", "video.mp4"],
+    tool: .ffprobe
+)
+if let duration = Double(durationStr.trimmingCharacters(in: .whitespacesAndNewlines)) {
+    print("Duration: \(duration) seconds")
+}
 ```
 
 ### Extract Audio
 
 ```swift
-try SwiftFFmpeg.execute([
+let (exitCode, output) = try SwiftFFmpeg.execute([
     "-i", videoPath,
     "-vn",              // No video
     "-c:a", "libmp3lame",
@@ -120,7 +158,7 @@ try SwiftFFmpeg.execute([
 ### Merge Video + Audio
 
 ```swift
-try SwiftFFmpeg.execute([
+let (exitCode, output) = try SwiftFFmpeg.execute([
     "-i", videoPath,
     "-i", audioPath,
     "-c:v", "copy",
@@ -149,11 +187,13 @@ SwiftFFmpeg.setLogHandler(nil)
 
 | Method | Description |
 |--------|-------------|
-| `execute([String])` | Run FFmpeg command. Throws on non-zero exit. |
-| `executeWithOutput([String])` | Run FFmpeg and capture output. Returns `(exitCode, output)`. |
+| `execute([String], tool: FFmpegTool)` | Run FFmpeg or ffprobe command and capture output. Returns `(exitCode, output)`. Defaults to `.ffmpeg`. Throws on non-zero exit. |
 | `setLogLevel(FFmpegLogLevel)` | Set log verbosity: `.quiet`, `.error`, `.warning`, `.info`, `.debug` |
 | `setLogHandler((level, message) -> Void)` | Receive FFmpeg log messages. Pass `nil` to disable. |
-| `getDuration(from: URL)` | Get media duration in seconds using ffprobe. |
+
+**FFmpegTool enum:**
+- `.ffmpeg` - Use ffmpeg (default)
+- `.ffprobe` - Use ffprobe
 
 ---
 
