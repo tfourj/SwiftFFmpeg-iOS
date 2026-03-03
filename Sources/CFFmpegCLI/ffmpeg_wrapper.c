@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 // --- Forward declarations from FFmpeg (we don't include FFmpeg headers) ---
 
@@ -92,110 +93,135 @@ int ffprobe_execute(int argc, char *argv[]) {
 
 // --- Execute with output capture ---
 
-int ffmpeg_execute_with_output(int argc, char *argv[], char *output_buffer, size_t output_buffer_size) {
-    if (!output_buffer || output_buffer_size == 0) {
-        return ffmpeg_execute(argc, argv);
+typedef struct {
+    int fd;
+    char *buffer;
+    size_t buffer_size;
+    size_t total_read;
+} output_reader_ctx;
+
+static void *output_reader_thread(void *arg) {
+    output_reader_ctx *ctx = (output_reader_ctx *)arg;
+    char temp[4096];
+
+    while (1) {
+        ssize_t bytes_read = read(ctx->fd, temp, sizeof(temp));
+        if (bytes_read <= 0) {
+            break;
+        }
+
+        if (ctx->buffer && ctx->buffer_size > 1 && ctx->total_read < (ctx->buffer_size - 1)) {
+            size_t remaining = (ctx->buffer_size - 1) - ctx->total_read;
+            size_t to_copy = (size_t)bytes_read < remaining ? (size_t)bytes_read : remaining;
+            memcpy(ctx->buffer + ctx->total_read, temp, to_copy);
+            ctx->total_read += to_copy;
+        }
     }
-    
-    // Initialize output buffer
+
+    if (ctx->buffer && ctx->buffer_size > 0) {
+        size_t end = ctx->total_read < (ctx->buffer_size - 1) ? ctx->total_read : (ctx->buffer_size - 1);
+        ctx->buffer[end] = '\0';
+    }
+
+    return NULL;
+}
+
+static int execute_with_output_common(
+    int argc,
+    char *argv[],
+    char *output_buffer,
+    size_t output_buffer_size,
+    int (*tool_main)(int, char *[]),
+    const char *program_name
+) {
+    if (!output_buffer || output_buffer_size == 0) {
+        ffmpeg_setup_logging_if_needed();
+        ffmpeg_reset();
+        set_library_program_name(program_name);
+        return tool_main(argc, argv);
+    }
+
     output_buffer[0] = '\0';
-    
-    // Create a pipe to capture output
+
     int pipefd[2];
     if (pipe(pipefd) < 0) {
-        return ffmpeg_execute(argc, argv);
+        ffmpeg_setup_logging_if_needed();
+        ffmpeg_reset();
+        set_library_program_name(program_name);
+        return tool_main(argc, argv);
     }
-    
-    // Save original stdout/stderr
+
     int stdout_fd = dup(STDOUT_FILENO);
     int stderr_fd = dup(STDERR_FILENO);
-    
-    // Redirect stdout and stderr to pipe write end
-    dup2(pipefd[1], STDOUT_FILENO);
-    dup2(pipefd[1], STDERR_FILENO);
-    close(pipefd[1]);  // Close write end in parent after dup
-    
-    // Execute FFmpeg
+    if (stdout_fd < 0 || stderr_fd < 0) {
+        if (stdout_fd >= 0) close(stdout_fd);
+        if (stderr_fd >= 0) close(stderr_fd);
+        close(pipefd[0]);
+        close(pipefd[1]);
+        ffmpeg_setup_logging_if_needed();
+        ffmpeg_reset();
+        set_library_program_name(program_name);
+        return tool_main(argc, argv);
+    }
+
+    if (dup2(pipefd[1], STDOUT_FILENO) < 0 || dup2(pipefd[1], STDERR_FILENO) < 0) {
+        dup2(stdout_fd, STDOUT_FILENO);
+        dup2(stderr_fd, STDERR_FILENO);
+        close(stdout_fd);
+        close(stderr_fd);
+        close(pipefd[0]);
+        close(pipefd[1]);
+        ffmpeg_setup_logging_if_needed();
+        ffmpeg_reset();
+        set_library_program_name(program_name);
+        return tool_main(argc, argv);
+    }
+    close(pipefd[1]);
+
+    output_reader_ctx reader_ctx = {
+        .fd = pipefd[0],
+        .buffer = output_buffer,
+        .buffer_size = output_buffer_size,
+        .total_read = 0
+    };
+    pthread_t reader_tid;
+    int reader_started = (pthread_create(&reader_tid, NULL, output_reader_thread, &reader_ctx) == 0);
+
     ffmpeg_setup_logging_if_needed();
-    ffmpeg_reset();  // Reset global state before each execution
-    set_library_program_name("ffmpeg");
-    int exit_code = ffmpeg_main(argc, argv);
-    
-    // Restore stdout/stderr
+    ffmpeg_reset();
+    set_library_program_name(program_name);
+    int exit_code = tool_main(argc, argv);
+
     fflush(stdout);
     fflush(stderr);
     dup2(stdout_fd, STDOUT_FILENO);
     dup2(stderr_fd, STDERR_FILENO);
     close(stdout_fd);
     close(stderr_fd);
-    
-    // Read output from pipe
-    size_t total_read = 0;
-    ssize_t bytes_read;
-    while (total_read < output_buffer_size - 1) {
-        bytes_read = read(pipefd[0], output_buffer + total_read, output_buffer_size - 1 - total_read);
-        if (bytes_read <= 0) break;
-        total_read += bytes_read;
+
+    if (reader_started) {
+        pthread_join(reader_tid, NULL);
+    } else {
+        ssize_t bytes_read;
+        size_t total_read = 0;
+        while (total_read < output_buffer_size - 1) {
+            bytes_read = read(pipefd[0], output_buffer + total_read, output_buffer_size - 1 - total_read);
+            if (bytes_read <= 0) break;
+            total_read += (size_t)bytes_read;
+        }
+        output_buffer[total_read] = '\0';
     }
-    output_buffer[total_read] = '\0';
-    
-    // Close read end of pipe
+
     close(pipefd[0]);
-    
     return exit_code;
+}
+
+int ffmpeg_execute_with_output(int argc, char *argv[], char *output_buffer, size_t output_buffer_size) {
+    return execute_with_output_common(argc, argv, output_buffer, output_buffer_size, ffmpeg_main, "ffmpeg");
 }
 
 // --- Execute ffprobe with output capture ---
 
 int ffprobe_execute_with_output(int argc, char *argv[], char *output_buffer, size_t output_buffer_size) {
-    if (!output_buffer || output_buffer_size == 0) {
-        return ffprobe_execute(argc, argv);
-    }
-    
-    // Initialize output buffer
-    output_buffer[0] = '\0';
-    
-    // Create a pipe to capture output
-    int pipefd[2];
-    if (pipe(pipefd) < 0) {
-        return ffprobe_execute(argc, argv);
-    }
-    
-    // Save original stdout/stderr
-    int stdout_fd = dup(STDOUT_FILENO);
-    int stderr_fd = dup(STDERR_FILENO);
-    
-    // Redirect stdout and stderr to pipe write end
-    dup2(pipefd[1], STDOUT_FILENO);
-    dup2(pipefd[1], STDERR_FILENO);
-    close(pipefd[1]);  // Close write end in parent after dup
-    
-    // Execute ffprobe
-    ffmpeg_setup_logging_if_needed();
-    ffmpeg_reset();  // Reset global state before each execution
-    set_library_program_name("ffprobe");
-    int exit_code = ffprobe_main(argc, argv);
-    
-    // Restore stdout/stderr
-    fflush(stdout);
-    fflush(stderr);
-    dup2(stdout_fd, STDOUT_FILENO);
-    dup2(stderr_fd, STDERR_FILENO);
-    close(stdout_fd);
-    close(stderr_fd);
-    
-    // Read output from pipe
-    size_t total_read = 0;
-    ssize_t bytes_read;
-    while (total_read < output_buffer_size - 1) {
-        bytes_read = read(pipefd[0], output_buffer + total_read, output_buffer_size - 1 - total_read);
-        if (bytes_read <= 0) break;
-        total_read += bytes_read;
-    }
-    output_buffer[total_read] = '\0';
-    
-    // Close read end of pipe
-    close(pipefd[0]);
-    
-    return exit_code;
+    return execute_with_output_common(argc, argv, output_buffer, output_buffer_size, ffprobe_main, "ffprobe");
 }
