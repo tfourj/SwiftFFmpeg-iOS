@@ -30,6 +30,7 @@ void av_log_set_level(int level);
 // --- Global state for Swift log callback ---
 
 static ffmpeg_swift_log_func g_swift_log_func = NULL;
+static pthread_mutex_t g_exec_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Optional: default log level if Swift doesn't set it
 static int g_log_level = 32; // roughly AV_LOG_INFO
@@ -134,11 +135,15 @@ static int execute_with_output_common(
     int (*tool_main)(int, char *[]),
     const char *program_name
 ) {
+    pthread_mutex_lock(&g_exec_mutex);
+
     if (!output_buffer || output_buffer_size == 0) {
         ffmpeg_setup_logging_if_needed();
         ffmpeg_reset();
         set_library_program_name(program_name);
-        return tool_main(argc, argv);
+        int code = tool_main(argc, argv);
+        pthread_mutex_unlock(&g_exec_mutex);
+        return code;
     }
 
     output_buffer[0] = '\0';
@@ -148,7 +153,9 @@ static int execute_with_output_common(
         ffmpeg_setup_logging_if_needed();
         ffmpeg_reset();
         set_library_program_name(program_name);
-        return tool_main(argc, argv);
+        int code = tool_main(argc, argv);
+        pthread_mutex_unlock(&g_exec_mutex);
+        return code;
     }
 
     int stdout_fd = dup(STDOUT_FILENO);
@@ -161,7 +168,9 @@ static int execute_with_output_common(
         ffmpeg_setup_logging_if_needed();
         ffmpeg_reset();
         set_library_program_name(program_name);
-        return tool_main(argc, argv);
+        int code = tool_main(argc, argv);
+        pthread_mutex_unlock(&g_exec_mutex);
+        return code;
     }
 
     if (dup2(pipefd[1], STDOUT_FILENO) < 0 || dup2(pipefd[1], STDERR_FILENO) < 0) {
@@ -174,7 +183,9 @@ static int execute_with_output_common(
         ffmpeg_setup_logging_if_needed();
         ffmpeg_reset();
         set_library_program_name(program_name);
-        return tool_main(argc, argv);
+        int code = tool_main(argc, argv);
+        pthread_mutex_unlock(&g_exec_mutex);
+        return code;
     }
     close(pipefd[1]);
 
@@ -213,6 +224,7 @@ static int execute_with_output_common(
     }
 
     close(pipefd[0]);
+    pthread_mutex_unlock(&g_exec_mutex);
     return exit_code;
 }
 
