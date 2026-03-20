@@ -11,17 +11,25 @@ Scripts that will build a Swift package that wraps FFmpeg for iOS. Run FFmpeg co
 
 ## Quick Start
 
-### 1. Use the Published Package
+### 1. Download the Release Package
 
-Add this repository in Xcode:
+Download `SwiftFFmpeg-iOS.zip` from the GitHub release, then extract it.
+
+The extracted folder already contains:
+
+- `Package.swift`
+- `Sources/`
+- `FFmpeg.xcframework`
+
+You can copy that folder into your project workspace and add it in Xcode as a local package without building FFmpeg yourself.
+
+### 2. Add It in Xcode
 
 - **File -> Add Package Dependencies...**
-- Enter `https://github.com/tfourj/SwiftFFmpeg-iOS`
-- Select a published tag
+- Click **Add Local...**
+- Choose the extracted `SwiftFFmpeg-iOS` folder
 
-The package manifest will download the matching `FFmpeg.xcframework.zip` release asset automatically, so your app does not need local SwiftFFmpeg binaries checked into it.
-
-### 2. Build the Framework Locally
+### 3. Build the Framework Locally
 
 ```bash
 ./Scripts/build-ffmpeg-ios.sh --version 8.1
@@ -29,7 +37,7 @@ The package manifest will download the matching `FFmpeg.xcframework.zip` release
 
 This creates `FFmpeg.xcframework` in the project root for local development.
 
-### 3. Use It
+### 4. Use It
 
 ```swift
 import SwiftFFmpeg
@@ -224,9 +232,9 @@ SwiftFFmpeg.setLogHandler(nil)
 - The build script auto-downloads FFmpeg. Ensure you have internet access and `git` installed.
 
 **"No such module 'SwiftFFmpeg'"**
-- If you are using a published tag, make sure the GitHub release contains `FFmpeg.xcframework.zip`
-- If you are working locally, make sure `FFmpeg.xcframework` exists (run the build script first)
-- Check that the framework is added to your target
+- If you are using a release download, make sure you extracted `SwiftFFmpeg-iOS.zip` and added the extracted folder as a local package
+- If you are working directly from the repository, make sure `FFmpeg.xcframework` exists or run the build script first
+- Check that the `SwiftFFmpeg` product is added to your target
 
 **App crashes on second FFmpeg call**
 - This is fixed automatically. The build script patches FFmpeg for re-entrant usage.

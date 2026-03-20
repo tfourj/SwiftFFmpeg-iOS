@@ -4,30 +4,21 @@ set -euo pipefail
 BUILD_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$BUILD_SCRIPT_DIR/../config.sh"
 
-RELEASE_TAG=""
-REPOSITORY_SLUG=""
 OUTPUT_DIR="$PROJECT_ROOT/release"
-ASSET_NAME="FFmpeg.xcframework.zip"
-METADATA_PATH="$PROJECT_ROOT/Package.release.json"
+ASSET_NAME="SwiftFFmpeg-iOS.zip"
+STAGING_DIR="$OUTPUT_DIR/SwiftFFmpeg-iOS"
 
 usage() {
   cat <<EOF
-Usage: ./Scripts/build/create-release-package.sh --tag <tag> --repo <owner/repo> [--output-dir <dir>]
+Usage: ./Scripts/build/create-release-package.sh [--output-dir <dir>]
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --tag)
-      RELEASE_TAG="$2"
-      shift 2
-      ;;
-    --repo)
-      REPOSITORY_SLUG="$2"
-      shift 2
-      ;;
     --output-dir)
       OUTPUT_DIR="$2"
+      STAGING_DIR="$OUTPUT_DIR/SwiftFFmpeg-iOS"
       shift 2
       ;;
     --help|-h)
@@ -42,11 +33,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$RELEASE_TAG" || -z "$REPOSITORY_SLUG" ]]; then
-  usage >&2
-  exit 1
-fi
-
 if [[ ! -d "$XCFRAMEWORK_PATH" ]]; then
   echo "FFmpeg.xcframework not found at $XCFRAMEWORK_PATH" >&2
   echo "Run ./Scripts/build-ffmpeg-ios.sh first." >&2
@@ -55,22 +41,18 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 ASSET_PATH="$OUTPUT_DIR/$ASSET_NAME"
+rm -rf "$STAGING_DIR"
 rm -f "$ASSET_PATH"
+mkdir -p "$STAGING_DIR"
 
 log_section "Packaging release artifact"
-ditto -c -k --sequesterRsrc --keepParent "$XCFRAMEWORK_PATH" "$ASSET_PATH"
-
-CHECKSUM="$(swift package compute-checksum "$ASSET_PATH")"
-ASSET_URL="https://github.com/$REPOSITORY_SLUG/releases/download/$RELEASE_TAG/$ASSET_NAME"
-
-cat > "$METADATA_PATH" <<EOF
-{
-  "version": "$RELEASE_TAG",
-  "url": "$ASSET_URL",
-  "checksum": "$CHECKSUM"
-}
-EOF
+cp "$PROJECT_ROOT/Package.swift" "$STAGING_DIR/"
+cp "$PROJECT_ROOT/LICENSE" "$STAGING_DIR/"
+cp "$PROJECT_ROOT/README.md" "$STAGING_DIR/"
+cp -R "$PROJECT_ROOT/Sources" "$STAGING_DIR/"
+cp -R "$XCFRAMEWORK_PATH" "$STAGING_DIR/"
+find "$STAGING_DIR" -name .DS_Store -delete
+ditto -c -k --sequesterRsrc --keepParent "$STAGING_DIR" "$ASSET_PATH"
 
 log "Release archive created at: $ASSET_PATH"
-log "Package metadata updated at: $METADATA_PATH"
-log "Checksum: $CHECKSUM"
+log "Package contents staged at: $STAGING_DIR"
