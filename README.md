@@ -11,23 +11,23 @@ Scripts that will build a Swift package that wraps FFmpeg for iOS. Run FFmpeg co
 
 ## Quick Start
 
-### 1. Build the Framework
+### 1. Use the Published Package
+
+Add this repository in Xcode:
+
+- **File -> Add Package Dependencies...**
+- Enter `https://github.com/tfourj/SwiftFFmpeg-iOS`
+- Select a published tag
+
+The package manifest will download the matching `FFmpeg.xcframework.zip` release asset automatically, so your app does not need local SwiftFFmpeg binaries checked into it.
+
+### 2. Build the Framework Locally
 
 ```bash
-./Scripts/build-ffmpeg-ios.sh
+./Scripts/build-ffmpeg-ios.sh --version 8.1
 ```
 
-This creates `FFmpeg.xcframework` in the project root.
-
-### 2. Add to Your Project
-
-**Swift Package Manager (Recommended):**
-
-In Xcode: **File → Add Package Dependencies...** → Enter the repository URL
-
-**Manual:**
-
-Drag `FFmpeg.xcframework` into your Xcode project and set to **Embed & Sign**
+This creates `FFmpeg.xcframework` in the project root for local development.
 
 ### 3. Use It
 
@@ -54,7 +54,7 @@ let (exitCode, output) = try SwiftFFmpeg.execute([
 
 # Build with specific version (non-interactive)
 ./Scripts/build-ffmpeg-ios.sh --version git          # Latest Git
-./Scripts/build-ffmpeg-ios.sh --version 7.0          # Stable version 7.0
+./Scripts/build-ffmpeg-ios.sh --version 8.1          # Stable version 8.1
 ./Scripts/build-ffmpeg-ios.sh --version latest        # Latest Git (alias)
 
 # Incremental build (skip cleaning)
@@ -224,7 +224,8 @@ SwiftFFmpeg.setLogHandler(nil)
 - The build script auto-downloads FFmpeg. Ensure you have internet access and `git` installed.
 
 **"No such module 'SwiftFFmpeg'"**
-- Make sure `FFmpeg.xcframework` exists (run the build script first)
+- If you are using a published tag, make sure the GitHub release contains `FFmpeg.xcframework.zip`
+- If you are working locally, make sure `FFmpeg.xcframework` exists (run the build script first)
 - Check that the framework is added to your target
 
 **App crashes on second FFmpeg call**

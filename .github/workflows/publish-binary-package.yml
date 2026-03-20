@@ -1,0 +1,73 @@
+name: Publish Binary Package
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: macos-15
+    env:
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      RELEASE_TAG: ${{ github.ref_name }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Build FFmpeg xcframework
+        run: ./Scripts/build-ffmpeg-ios.sh --version 8.1
+
+      - name: Package release asset
+        run: ./Scripts/build/create-release-package.sh --tag "$RELEASE_TAG" --repo "${{ github.repository }}"
+
+      - name: Validate package manifest without local xcframework
+        run: |
+          mv FFmpeg.xcframework "$RUNNER_TEMP/FFmpeg.xcframework"
+          swift package dump-package > /dev/null
+          mv "$RUNNER_TEMP/FFmpeg.xcframework" FFmpeg.xcframework
+
+      - name: Commit release metadata
+        id: metadata
+        run: |
+          if git diff --quiet -- Package.release.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git add Package.release.json
+          git commit -m "update release metadata for $RELEASE_TAG"
+
+          METADATA_COMMIT="$(git rev-parse HEAD)"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$METADATA_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Push metadata to tag and default branch
+        if: steps.metadata.outputs.changed == 'true'
+        run: |
+          git tag -f "$RELEASE_TAG" "${{ steps.metadata.outputs.commit_sha }}"
+          git push origin "refs/tags/$RELEASE_TAG" --force
+
+          git fetch origin "$DEFAULT_BRANCH"
+          git switch -C "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
+          git cherry-pick "${{ steps.metadata.outputs.commit_sha }}"
+          git push origin "HEAD:$DEFAULT_BRANCH"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: release/FFmpeg.xcframework.zip
+          generate_release_notes: true

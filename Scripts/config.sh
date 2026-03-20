@@ -20,7 +20,11 @@ PATCHES_DIR="$SCRIPT_DIR/patches"
 
 # Build settings
 MIN_IOS_VERSION="13.0"
-NUM_JOBS="$(sysctl -n hw.ncpu)"
+NUM_JOBS="$(
+  sysctl -n hw.ncpu 2>/dev/null ||
+  getconf _NPROCESSORS_ONLN 2>/dev/null ||
+  echo 4
+)"
 
 # Report file for clean build summary
 REPORT_FILE="$PROJECT_ROOT/build-report.txt"
@@ -141,4 +145,3 @@ Report saved to: $REPORT_FILE
 EOF
   log "Build report saved to: $REPORT_FILE"
 }
-
