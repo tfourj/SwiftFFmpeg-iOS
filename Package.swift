@@ -70,6 +70,7 @@ let package = Package(
         .target(
             name: "CFFmpegCLI",
             dependencies: ["FFmpeg"],
+            path: "Sources/CFFmpegCLI",
             publicHeadersPath: "include",
             linkerSettings: [
                 .linkedFramework("AudioToolbox"),
@@ -85,6 +86,7 @@ let package = Package(
         .target(
             name: "SwiftFFmpeg",
             dependencies: ["CFFmpegCLI"],
+            path: "Sources/SwiftFFmpeg",
             linkerSettings: [
                 .linkedFramework("AudioToolbox"),
                 .linkedFramework("AVFoundation"),
@@ -94,10 +96,6 @@ let package = Package(
                 .linkedLibrary("bz2"),
                 .linkedLibrary("iconv")
             ]
-        ),
-        .testTarget(
-            name: "SwiftFFmpegTests",
-            dependencies: ["SwiftFFmpeg"]
         )
     ]
 )
