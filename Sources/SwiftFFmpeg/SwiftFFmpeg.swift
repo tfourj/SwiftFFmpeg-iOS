@@ -1,5 +1,5 @@
 import Foundation
-import CFFmpegCLI
+internal import CFFmpegCLI
 
 public enum SwiftFFmpegError: Error {
     case executionFailed(code: Int)
