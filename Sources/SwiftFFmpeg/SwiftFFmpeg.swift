@@ -30,6 +30,7 @@ public enum SwiftFFmpeg {
 
     // Stored log handler used by global C callback.
     private static let logHandlerLock = NSLock()
+    private static let logDispatchQueue = DispatchQueue(label: "com.tfourj.swiftffmpeg.log-handler")
     private static var logHandler: LogHandler?
 
     /// Set a log handler that receives FFmpeg log lines.
@@ -60,7 +61,9 @@ public enum SwiftFFmpeg {
         logHandlerLock.unlock()
         guard let handler else { return }
         let lvl = FFmpegLogLevel(rawValue: level) ?? .info
-        handler(lvl, message)
+        logDispatchQueue.async {
+            handler(lvl, message)
+        }
     }
 
     /// Execute FFmpeg or ffprobe with the given arguments and capture stdout/stderr output.
@@ -157,6 +160,6 @@ public enum SwiftFFmpeg {
 @_cdecl("ffmpeg_log_swift")
 func ffmpeg_log_swift(_ level: Int32, _ message: UnsafePointer<CChar>?) {
     guard let message = message else { return }
-    let str = String(cString: message)
+    let str = String(decoding: Data(bytes: message, count: strlen(message)), as: UTF8.self)
     SwiftFFmpeg.handleLog(level: level, message: str)
 }
