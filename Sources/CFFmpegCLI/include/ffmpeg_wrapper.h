@@ -34,21 +34,39 @@ void ffmpeg_clear_cancel(void);
 /// \return ffprobe exit code (0 = success)
 int ffprobe_execute(int argc, char *argv[]);
 
-/// Execute FFmpeg and capture stdout/stderr output.
+/// Execute FFmpeg and capture stdout/stderr output separately.
 /// \param argc Number of arguments
 /// \param argv Array of C strings (argv[0] is normally "ffmpeg")
-/// \param output_buffer Buffer to store output (will be null-terminated)
-/// \param output_buffer_size Size of output_buffer
+/// \param stdout_buffer Buffer to store stdout (will be null-terminated)
+/// \param stdout_buffer_size Size of stdout_buffer
+/// \param stderr_buffer Buffer to store stderr (will be null-terminated)
+/// \param stderr_buffer_size Size of stderr_buffer
 /// \return FFmpeg exit code (0 = success)
-int ffmpeg_execute_with_output(int argc, char *argv[], char *output_buffer, size_t output_buffer_size);
+int ffmpeg_execute_with_output(
+    int argc,
+    char *argv[],
+    char *stdout_buffer,
+    size_t stdout_buffer_size,
+    char *stderr_buffer,
+    size_t stderr_buffer_size
+);
 
-/// Execute ffprobe and capture stdout/stderr output.
+/// Execute ffprobe and capture stdout/stderr output separately.
 /// \param argc Number of arguments
 /// \param argv Array of C strings (argv[0] is normally "ffprobe")
-/// \param output_buffer Buffer to store output (will be null-terminated)
-/// \param output_buffer_size Size of output_buffer
+/// \param stdout_buffer Buffer to store stdout (will be null-terminated)
+/// \param stdout_buffer_size Size of stdout_buffer
+/// \param stderr_buffer Buffer to store stderr (will be null-terminated)
+/// \param stderr_buffer_size Size of stderr_buffer
 /// \return ffprobe exit code (0 = success)
-int ffprobe_execute_with_output(int argc, char *argv[], char *output_buffer, size_t output_buffer_size);
+int ffprobe_execute_with_output(
+    int argc,
+    char *argv[],
+    char *stdout_buffer,
+    size_t stdout_buffer_size,
+    char *stderr_buffer,
+    size_t stderr_buffer_size
+);
 
 #ifdef __cplusplus
 }

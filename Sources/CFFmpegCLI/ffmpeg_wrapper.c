@@ -1,6 +1,5 @@
 #include "ffmpeg_wrapper.h"
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -31,7 +30,6 @@ void term_init(void);
 void term_exit(void);
 
 // FFmpeg logging API
-void av_log_set_callback(void (*callback)(void *ptr, int level, const char *fmt, va_list vl));
 void av_log_set_level(int level);
 
 // --- Global state for Swift log callback ---
@@ -63,32 +61,17 @@ void ffmpeg_clear_cancel(void) {
     atomic_store(&g_cancel_requested, 0);
 }
 
-// --- Internal FFmpeg log callback ---
+// --- Setup logging once ---
 
-static void ffmpeg_log_callback(void *ptr, int level, const char *fmt, va_list vl) {
-    (void)ptr; // unused
+static int g_logging_initialized = 0;
 
+static ffmpeg_swift_log_func ffmpeg_copy_swift_logger(void) {
     ffmpeg_swift_log_func swift_log_func = NULL;
     pthread_mutex_lock(&g_log_callback_mutex);
     swift_log_func = g_swift_log_func;
     pthread_mutex_unlock(&g_log_callback_mutex);
-
-    if (!swift_log_func || !fmt) {
-        return;
-    }
-
-    char buffer[1024];
-    vsnprintf(buffer, sizeof(buffer), fmt, vl);
-
-    // Ensure null-terminated
-    buffer[sizeof(buffer) - 1] = '\0';
-
-    swift_log_func(level, buffer);
+    return swift_log_func;
 }
-
-// --- Setup logging once ---
-
-static int g_logging_initialized = 0;
 
 static void ffmpeg_setup_logging_if_needed(void) {
     if (g_logging_initialized) {
@@ -96,7 +79,6 @@ static void ffmpeg_setup_logging_if_needed(void) {
     }
     g_logging_initialized = 1;
 
-    av_log_set_callback(ffmpeg_log_callback);
     av_log_set_level(g_log_level);
 }
 
@@ -104,14 +86,14 @@ static void ffmpeg_setup_logging_if_needed(void) {
 
 int ffmpeg_execute(int argc, char *argv[]) {
     ffmpeg_setup_logging_if_needed();
-    ffmpeg_reset();  // Reset global state before each execution
+    ffmpeg_reset();
     set_library_program_name("ffmpeg");
     return ffmpeg_main(argc, argv);
 }
 
 int ffprobe_execute(int argc, char *argv[]) {
     ffmpeg_setup_logging_if_needed();
-    ffmpeg_reset();  // Reset global state before each execution
+    ffmpeg_reset();
     set_library_program_name("ffprobe");
     return ffprobe_main(argc, argv);
 }
@@ -123,21 +105,47 @@ typedef struct {
     char *buffer;
     size_t buffer_size;
     size_t total_read;
+    int forward_to_logger;
 } output_reader_ctx;
 
 typedef struct {
     atomic_int *done;
 } cancel_watcher_ctx;
 
-static void *output_reader_thread(void *arg) {
-    output_reader_ctx *ctx = (output_reader_ctx *)arg;
-    char temp[4096];
+static void close_if_valid(int fd) {
+    if (fd >= 0) {
+        close(fd);
+    }
+}
+
+static void finalize_output_buffer(output_reader_ctx *ctx) {
+    if (ctx->buffer && ctx->buffer_size > 0) {
+        size_t end = ctx->total_read < (ctx->buffer_size - 1) ? ctx->total_read : (ctx->buffer_size - 1);
+        ctx->buffer[end] = '\0';
+    }
+}
+
+static void forward_output_chunk(output_reader_ctx *ctx, const char *chunk) {
+    if (!ctx->forward_to_logger) {
+        return;
+    }
+
+    ffmpeg_swift_log_func swift_log_func = ffmpeg_copy_swift_logger();
+    if (swift_log_func) {
+        swift_log_func(g_log_level, chunk);
+    }
+}
+
+static void drain_output_fd(output_reader_ctx *ctx) {
+    char temp[4097];
 
     while (1) {
-        ssize_t bytes_read = read(ctx->fd, temp, sizeof(temp));
+        ssize_t bytes_read = read(ctx->fd, temp, sizeof(temp) - 1);
         if (bytes_read <= 0) {
             break;
         }
+
+        temp[bytes_read] = '\0';
 
         if (ctx->buffer && ctx->buffer_size > 1 && ctx->total_read < (ctx->buffer_size - 1)) {
             size_t remaining = (ctx->buffer_size - 1) - ctx->total_read;
@@ -145,13 +153,16 @@ static void *output_reader_thread(void *arg) {
             memcpy(ctx->buffer + ctx->total_read, temp, to_copy);
             ctx->total_read += to_copy;
         }
+
+        forward_output_chunk(ctx, temp);
     }
 
-    if (ctx->buffer && ctx->buffer_size > 0) {
-        size_t end = ctx->total_read < (ctx->buffer_size - 1) ? ctx->total_read : (ctx->buffer_size - 1);
-        ctx->buffer[end] = '\0';
-    }
+    finalize_output_buffer(ctx);
+}
 
+static void *output_reader_thread(void *arg) {
+    output_reader_ctx *ctx = (output_reader_ctx *)arg;
+    drain_output_fd(ctx);
     return NULL;
 }
 
@@ -204,61 +215,95 @@ static int execute_tool_main(int argc, char *argv[], int (*tool_main)(int, char 
 static int execute_with_output_common(
     int argc,
     char *argv[],
-    char *output_buffer,
-    size_t output_buffer_size,
+    char *stdout_buffer,
+    size_t stdout_buffer_size,
+    char *stderr_buffer,
+    size_t stderr_buffer_size,
     int (*tool_main)(int, char *[]),
     const char *program_name
 ) {
     pthread_mutex_lock(&g_exec_mutex);
 
-    if (!output_buffer || output_buffer_size == 0) {
+    if (stdout_buffer && stdout_buffer_size > 0) {
+        stdout_buffer[0] = '\0';
+    }
+    if (stderr_buffer && stderr_buffer_size > 0) {
+        stderr_buffer[0] = '\0';
+    }
+
+    if ((!stdout_buffer || stdout_buffer_size == 0) && (!stderr_buffer || stderr_buffer_size == 0)) {
         int code = execute_tool_main(argc, argv, tool_main, program_name);
         pthread_mutex_unlock(&g_exec_mutex);
         return code;
     }
 
-    output_buffer[0] = '\0';
+    int stdout_pipe[2] = {-1, -1};
+    int stderr_pipe[2] = {-1, -1};
+    int stdout_fd = -1;
+    int stderr_fd = -1;
 
-    int pipefd[2];
-    if (pipe(pipefd) < 0) {
+    if (pipe(stdout_pipe) < 0 || pipe(stderr_pipe) < 0) {
+        close_if_valid(stdout_pipe[0]);
+        close_if_valid(stdout_pipe[1]);
+        close_if_valid(stderr_pipe[0]);
+        close_if_valid(stderr_pipe[1]);
         int code = execute_tool_main(argc, argv, tool_main, program_name);
         pthread_mutex_unlock(&g_exec_mutex);
         return code;
     }
 
-    int stdout_fd = dup(STDOUT_FILENO);
-    int stderr_fd = dup(STDERR_FILENO);
+    stdout_fd = dup(STDOUT_FILENO);
+    stderr_fd = dup(STDERR_FILENO);
     if (stdout_fd < 0 || stderr_fd < 0) {
-        if (stdout_fd >= 0) close(stdout_fd);
-        if (stderr_fd >= 0) close(stderr_fd);
-        close(pipefd[0]);
-        close(pipefd[1]);
+        close_if_valid(stdout_fd);
+        close_if_valid(stderr_fd);
+        close_if_valid(stdout_pipe[0]);
+        close_if_valid(stdout_pipe[1]);
+        close_if_valid(stderr_pipe[0]);
+        close_if_valid(stderr_pipe[1]);
         int code = execute_tool_main(argc, argv, tool_main, program_name);
         pthread_mutex_unlock(&g_exec_mutex);
         return code;
     }
 
-    if (dup2(pipefd[1], STDOUT_FILENO) < 0 || dup2(pipefd[1], STDERR_FILENO) < 0) {
+    if (dup2(stdout_pipe[1], STDOUT_FILENO) < 0 || dup2(stderr_pipe[1], STDERR_FILENO) < 0) {
         dup2(stdout_fd, STDOUT_FILENO);
         dup2(stderr_fd, STDERR_FILENO);
-        close(stdout_fd);
-        close(stderr_fd);
-        close(pipefd[0]);
-        close(pipefd[1]);
+        close_if_valid(stdout_fd);
+        close_if_valid(stderr_fd);
+        close_if_valid(stdout_pipe[0]);
+        close_if_valid(stdout_pipe[1]);
+        close_if_valid(stderr_pipe[0]);
+        close_if_valid(stderr_pipe[1]);
         int code = execute_tool_main(argc, argv, tool_main, program_name);
         pthread_mutex_unlock(&g_exec_mutex);
         return code;
     }
-    close(pipefd[1]);
 
-    output_reader_ctx reader_ctx = {
-        .fd = pipefd[0],
-        .buffer = output_buffer,
-        .buffer_size = output_buffer_size,
-        .total_read = 0
+    close_if_valid(stdout_pipe[1]);
+    stdout_pipe[1] = -1;
+    close_if_valid(stderr_pipe[1]);
+    stderr_pipe[1] = -1;
+
+    output_reader_ctx stdout_ctx = {
+        .fd = stdout_pipe[0],
+        .buffer = stdout_buffer,
+        .buffer_size = stdout_buffer_size,
+        .total_read = 0,
+        .forward_to_logger = 0
     };
-    pthread_t reader_tid;
-    int reader_started = (pthread_create(&reader_tid, NULL, output_reader_thread, &reader_ctx) == 0);
+    output_reader_ctx stderr_ctx = {
+        .fd = stderr_pipe[0],
+        .buffer = stderr_buffer,
+        .buffer_size = stderr_buffer_size,
+        .total_read = 0,
+        .forward_to_logger = 1
+    };
+
+    pthread_t stdout_reader_tid;
+    pthread_t stderr_reader_tid;
+    int stdout_reader_started = (pthread_create(&stdout_reader_tid, NULL, output_reader_thread, &stdout_ctx) == 0);
+    int stderr_reader_started = (pthread_create(&stderr_reader_tid, NULL, output_reader_thread, &stderr_ctx) == 0);
 
     int exit_code = execute_tool_main(argc, argv, tool_main, program_name);
 
@@ -266,33 +311,63 @@ static int execute_with_output_common(
     fflush(stderr);
     dup2(stdout_fd, STDOUT_FILENO);
     dup2(stderr_fd, STDERR_FILENO);
-    close(stdout_fd);
-    close(stderr_fd);
+    close_if_valid(stdout_fd);
+    close_if_valid(stderr_fd);
 
-    if (reader_started) {
-        pthread_join(reader_tid, NULL);
+    if (stdout_reader_started) {
+        pthread_join(stdout_reader_tid, NULL);
     } else {
-        ssize_t bytes_read;
-        size_t total_read = 0;
-        while (total_read < output_buffer_size - 1) {
-            bytes_read = read(pipefd[0], output_buffer + total_read, output_buffer_size - 1 - total_read);
-            if (bytes_read <= 0) break;
-            total_read += (size_t)bytes_read;
-        }
-        output_buffer[total_read] = '\0';
+        drain_output_fd(&stdout_ctx);
     }
 
-    close(pipefd[0]);
+    if (stderr_reader_started) {
+        pthread_join(stderr_reader_tid, NULL);
+    } else {
+        drain_output_fd(&stderr_ctx);
+    }
+
+    close_if_valid(stdout_pipe[0]);
+    close_if_valid(stderr_pipe[0]);
     pthread_mutex_unlock(&g_exec_mutex);
     return exit_code;
 }
 
-int ffmpeg_execute_with_output(int argc, char *argv[], char *output_buffer, size_t output_buffer_size) {
-    return execute_with_output_common(argc, argv, output_buffer, output_buffer_size, ffmpeg_main, "ffmpeg");
+int ffmpeg_execute_with_output(
+    int argc,
+    char *argv[],
+    char *stdout_buffer,
+    size_t stdout_buffer_size,
+    char *stderr_buffer,
+    size_t stderr_buffer_size
+) {
+    return execute_with_output_common(
+        argc,
+        argv,
+        stdout_buffer,
+        stdout_buffer_size,
+        stderr_buffer,
+        stderr_buffer_size,
+        ffmpeg_main,
+        "ffmpeg"
+    );
 }
 
-// --- Execute ffprobe with output capture ---
-
-int ffprobe_execute_with_output(int argc, char *argv[], char *output_buffer, size_t output_buffer_size) {
-    return execute_with_output_common(argc, argv, output_buffer, output_buffer_size, ffprobe_main, "ffprobe");
+int ffprobe_execute_with_output(
+    int argc,
+    char *argv[],
+    char *stdout_buffer,
+    size_t stdout_buffer_size,
+    char *stderr_buffer,
+    size_t stderr_buffer_size
+) {
+    return execute_with_output_common(
+        argc,
+        argv,
+        stdout_buffer,
+        stdout_buffer_size,
+        stderr_buffer,
+        stderr_buffer_size,
+        ffprobe_main,
+        "ffprobe"
+    );
 }
