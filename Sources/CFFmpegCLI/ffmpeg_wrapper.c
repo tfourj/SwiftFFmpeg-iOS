@@ -8,7 +8,6 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <pthread.h>
-#include <signal.h>
 #include <stdatomic.h>
 
 // --- Forward declarations from FFmpeg (we don't include FFmpeg headers) ---
@@ -27,6 +26,9 @@ void set_library_program_name(const char *name);
 
 // Install FFmpeg CLI signal handlers.
 void term_init(void);
+
+// Request ffmpeg CLI termination without delivering a process signal.
+void term_exit(void);
 
 // FFmpeg logging API
 void av_log_set_callback(void (*callback)(void *ptr, int level, const char *fmt, va_list vl));
@@ -124,7 +126,6 @@ typedef struct {
 } output_reader_ctx;
 
 typedef struct {
-    pthread_t target_thread;
     atomic_int *done;
 } cancel_watcher_ctx;
 
@@ -156,7 +157,7 @@ static void *output_reader_thread(void *arg) {
 
 static void *cancel_watcher_thread(void *arg) {
     cancel_watcher_ctx *ctx = (cancel_watcher_ctx *)arg;
-    int signals_sent = 0;
+    int cancel_requested = 0;
 
     while (!atomic_load(ctx->done)) {
         if (!atomic_load(&g_cancel_requested)) {
@@ -164,9 +165,9 @@ static void *cancel_watcher_thread(void *arg) {
             continue;
         }
 
-        if (signals_sent < 3) {
-            pthread_kill(ctx->target_thread, SIGINT);
-            signals_sent++;
+        if (!cancel_requested) {
+            term_exit();
+            cancel_requested = 1;
         }
 
         usleep(200000);
@@ -184,7 +185,6 @@ static int execute_tool_main(int argc, char *argv[], int (*tool_main)(int, char 
 
     atomic_int cancel_done = 0;
     cancel_watcher_ctx cancel_ctx = {
-        .target_thread = pthread_self(),
         .done = &cancel_done
     };
     pthread_t cancel_tid;
