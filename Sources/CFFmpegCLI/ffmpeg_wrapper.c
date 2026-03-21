@@ -31,12 +31,15 @@ void av_log_set_level(int level);
 
 static ffmpeg_swift_log_func g_swift_log_func = NULL;
 static pthread_mutex_t g_exec_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_log_callback_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Optional: default log level if Swift doesn't set it
 static int g_log_level = 32; // roughly AV_LOG_INFO
 
 void ffmpeg_set_swift_logger(ffmpeg_swift_log_func func) {
+    pthread_mutex_lock(&g_log_callback_mutex);
     g_swift_log_func = func;
+    pthread_mutex_unlock(&g_log_callback_mutex);
 }
 
 void ffmpeg_set_log_level(int level) {
@@ -49,7 +52,12 @@ void ffmpeg_set_log_level(int level) {
 static void ffmpeg_log_callback(void *ptr, int level, const char *fmt, va_list vl) {
     (void)ptr; // unused
 
-    if (!g_swift_log_func) {
+    ffmpeg_swift_log_func swift_log_func = NULL;
+    pthread_mutex_lock(&g_log_callback_mutex);
+    swift_log_func = g_swift_log_func;
+    pthread_mutex_unlock(&g_log_callback_mutex);
+
+    if (!swift_log_func || !fmt) {
         return;
     }
 
@@ -59,7 +67,7 @@ static void ffmpeg_log_callback(void *ptr, int level, const char *fmt, va_list v
     // Ensure null-terminated
     buffer[sizeof(buffer) - 1] = '\0';
 
-    g_swift_log_func(level, buffer);
+    swift_log_func(level, buffer);
 }
 
 // --- Setup logging once ---

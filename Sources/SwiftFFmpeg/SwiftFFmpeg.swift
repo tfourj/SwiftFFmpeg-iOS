@@ -29,18 +29,18 @@ public enum SwiftFFmpeg {
     public typealias LogHandler = (_ level: FFmpegLogLevel, _ message: String) -> Void
 
     // Stored log handler used by global C callback.
+    private static let logHandlerLock = NSLock()
     private static var logHandler: LogHandler?
 
     /// Set a log handler that receives FFmpeg log lines.
     /// Call with `nil` to disable.
     public static func setLogHandler(_ handler: LogHandler?) {
+        logHandlerLock.lock()
         logHandler = handler
+        logHandlerLock.unlock()
 
-        if handler != nil {
-            ffmpeg_set_swift_logger(ffmpeg_log_swift)
-        } else {
-            ffmpeg_set_swift_logger(nil)
-        }
+        // Keep the C callback target stable; Swift decides whether to ignore logs.
+        ffmpeg_set_swift_logger(ffmpeg_log_swift)
     }
 
     /// Set FFmpeg log level.
@@ -50,7 +50,10 @@ public enum SwiftFFmpeg {
 
     /// INTERNAL: called from the C bridge.
     static func handleLog(level: Int32, message: String) {
-        guard let handler = logHandler else { return }
+        logHandlerLock.lock()
+        let handler = logHandler
+        logHandlerLock.unlock()
+        guard let handler else { return }
         let lvl = FFmpegLogLevel(rawValue: level) ?? .info
         handler(lvl, message)
     }
