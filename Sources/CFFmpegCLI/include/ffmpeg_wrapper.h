@@ -22,6 +22,12 @@ void ffmpeg_set_swift_logger(ffmpeg_swift_log_func func);
 /// Set FFmpeg log level (e.g. 32 = info, 16 = warning, 8 = error, etc.)
 void ffmpeg_set_log_level(int level);
 
+/// Request cancellation of the active FFmpeg/ffprobe execution, if any.
+void ffmpeg_request_cancel(void);
+
+/// Clear any pending FFmpeg/ffprobe cancellation request.
+void ffmpeg_clear_cancel(void);
+
 /// Execute ffprobe as if calling its CLI.
 /// \param argc Number of arguments
 /// \param argv Array of C strings (argv[0] is normally "ffprobe")

@@ -8,6 +8,8 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <signal.h>
+#include <stdatomic.h>
 
 // --- Forward declarations from FFmpeg (we don't include FFmpeg headers) ---
 
@@ -23,6 +25,9 @@ void ffmpeg_reset(void);
 // Set program name for library mode (from patched opt_common.c)
 void set_library_program_name(const char *name);
 
+// Install FFmpeg CLI signal handlers.
+void term_init(void);
+
 // FFmpeg logging API
 void av_log_set_callback(void (*callback)(void *ptr, int level, const char *fmt, va_list vl));
 void av_log_set_level(int level);
@@ -32,6 +37,7 @@ void av_log_set_level(int level);
 static ffmpeg_swift_log_func g_swift_log_func = NULL;
 static pthread_mutex_t g_exec_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_log_callback_mutex = PTHREAD_MUTEX_INITIALIZER;
+static atomic_int g_cancel_requested = 0;
 
 // Optional: default log level if Swift doesn't set it
 static int g_log_level = 32; // roughly AV_LOG_INFO
@@ -45,6 +51,14 @@ void ffmpeg_set_swift_logger(ffmpeg_swift_log_func func) {
 void ffmpeg_set_log_level(int level) {
     g_log_level = level;
     av_log_set_level(level);
+}
+
+void ffmpeg_request_cancel(void) {
+    atomic_store(&g_cancel_requested, 1);
+}
+
+void ffmpeg_clear_cancel(void) {
+    atomic_store(&g_cancel_requested, 0);
 }
 
 // --- Internal FFmpeg log callback ---
@@ -109,6 +123,11 @@ typedef struct {
     size_t total_read;
 } output_reader_ctx;
 
+typedef struct {
+    pthread_t target_thread;
+    atomic_int *done;
+} cancel_watcher_ctx;
+
 static void *output_reader_thread(void *arg) {
     output_reader_ctx *ctx = (output_reader_ctx *)arg;
     char temp[4096];
@@ -135,6 +154,53 @@ static void *output_reader_thread(void *arg) {
     return NULL;
 }
 
+static void *cancel_watcher_thread(void *arg) {
+    cancel_watcher_ctx *ctx = (cancel_watcher_ctx *)arg;
+    int signals_sent = 0;
+
+    while (!atomic_load(ctx->done)) {
+        if (!atomic_load(&g_cancel_requested)) {
+            usleep(20000);
+            continue;
+        }
+
+        if (signals_sent < 3) {
+            pthread_kill(ctx->target_thread, SIGINT);
+            signals_sent++;
+        }
+
+        usleep(200000);
+    }
+
+    return NULL;
+}
+
+static int execute_tool_main(int argc, char *argv[], int (*tool_main)(int, char *[]), const char *program_name) {
+    ffmpeg_setup_logging_if_needed();
+    ffmpeg_clear_cancel();
+    ffmpeg_reset();
+    set_library_program_name(program_name);
+    term_init();
+
+    atomic_int cancel_done = 0;
+    cancel_watcher_ctx cancel_ctx = {
+        .target_thread = pthread_self(),
+        .done = &cancel_done
+    };
+    pthread_t cancel_tid;
+    int cancel_started = (pthread_create(&cancel_tid, NULL, cancel_watcher_thread, &cancel_ctx) == 0);
+
+    int exit_code = tool_main(argc, argv);
+
+    atomic_store(&cancel_done, 1);
+    if (cancel_started) {
+        pthread_join(cancel_tid, NULL);
+    }
+
+    ffmpeg_clear_cancel();
+    return exit_code;
+}
+
 static int execute_with_output_common(
     int argc,
     char *argv[],
@@ -146,10 +212,7 @@ static int execute_with_output_common(
     pthread_mutex_lock(&g_exec_mutex);
 
     if (!output_buffer || output_buffer_size == 0) {
-        ffmpeg_setup_logging_if_needed();
-        ffmpeg_reset();
-        set_library_program_name(program_name);
-        int code = tool_main(argc, argv);
+        int code = execute_tool_main(argc, argv, tool_main, program_name);
         pthread_mutex_unlock(&g_exec_mutex);
         return code;
     }
@@ -158,10 +221,7 @@ static int execute_with_output_common(
 
     int pipefd[2];
     if (pipe(pipefd) < 0) {
-        ffmpeg_setup_logging_if_needed();
-        ffmpeg_reset();
-        set_library_program_name(program_name);
-        int code = tool_main(argc, argv);
+        int code = execute_tool_main(argc, argv, tool_main, program_name);
         pthread_mutex_unlock(&g_exec_mutex);
         return code;
     }
@@ -173,10 +233,7 @@ static int execute_with_output_common(
         if (stderr_fd >= 0) close(stderr_fd);
         close(pipefd[0]);
         close(pipefd[1]);
-        ffmpeg_setup_logging_if_needed();
-        ffmpeg_reset();
-        set_library_program_name(program_name);
-        int code = tool_main(argc, argv);
+        int code = execute_tool_main(argc, argv, tool_main, program_name);
         pthread_mutex_unlock(&g_exec_mutex);
         return code;
     }
@@ -188,10 +245,7 @@ static int execute_with_output_common(
         close(stderr_fd);
         close(pipefd[0]);
         close(pipefd[1]);
-        ffmpeg_setup_logging_if_needed();
-        ffmpeg_reset();
-        set_library_program_name(program_name);
-        int code = tool_main(argc, argv);
+        int code = execute_tool_main(argc, argv, tool_main, program_name);
         pthread_mutex_unlock(&g_exec_mutex);
         return code;
     }
@@ -206,10 +260,7 @@ static int execute_with_output_common(
     pthread_t reader_tid;
     int reader_started = (pthread_create(&reader_tid, NULL, output_reader_thread, &reader_ctx) == 0);
 
-    ffmpeg_setup_logging_if_needed();
-    ffmpeg_reset();
-    set_library_program_name(program_name);
-    int exit_code = tool_main(argc, argv);
+    int exit_code = execute_tool_main(argc, argv, tool_main, program_name);
 
     fflush(stdout);
     fflush(stderr);

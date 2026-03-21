@@ -48,6 +48,11 @@ public enum SwiftFFmpeg {
         ffmpeg_set_log_level(level.rawValue)
     }
 
+    /// Request cancellation of the active ffmpeg or ffprobe execution.
+    public static func requestCancel() {
+        ffmpeg_request_cancel()
+    }
+
     /// INTERNAL: called from the C bridge.
     static func handleLog(level: Int32, message: String) {
         logHandlerLock.lock()
@@ -92,6 +97,8 @@ public enum SwiftFFmpeg {
     /// - Returns: Tuple containing exit code and output string
     /// - Throws: `SwiftFFmpegError.executionFailed(code:)` if the tool returns non-zero exit code
     public static func execute(_ arguments: [String], tool: FFmpegTool = .ffmpeg) throws -> (exitCode: Int, output: String) {
+        ffmpeg_clear_cancel()
+
         // argv[0] must be some program name
         let programName = tool == .ffmpeg ? "ffmpeg" : "ffprobe"
         let allArgs = [programName] + arguments
