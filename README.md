@@ -37,6 +37,8 @@ cd SwiftFFmpeg-iOS
 ./Scripts/build-ffmpeg-ios.sh --version 8.1
 ```
 
+Use `--version latest` to build the newest tagged FFmpeg release. Use `--version git` only if you explicitly want a git snapshot, which may report a commit-style version string in `ffmpeg --version`.
+
 3. In Xcode, open **File -> Add Package Dependencies...**
 4. Click **Add Local...**
 5. Select your local `SwiftFFmpeg-iOS` checkout.

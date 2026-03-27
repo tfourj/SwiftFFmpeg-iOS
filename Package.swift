@@ -60,6 +60,11 @@ let package = Package(
                 .linkedLibrary("bz2"),
                 .linkedLibrary("iconv")
             ]
+        ),
+        .testTarget(
+            name: "SwiftFFmpegTests",
+            dependencies: ["SwiftFFmpeg"],
+            path: "Tests/SwiftFFmpegTests"
         )
     ]
 )

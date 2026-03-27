@@ -23,14 +23,92 @@ get_ffmpeg_versions() {
   fi
 }
 
+get_latest_ffmpeg_release() {
+  local versions
+  versions=$(get_ffmpeg_versions)
+  echo "$versions" | head -n 1
+}
+
+log_ffmpeg_source_version_metadata() {
+  if [ ! -d "$FFMPEG_SRC_DIR" ]; then
+    log "FFmpeg source metadata: source directory not present"
+    return
+  fi
+
+  local version_file=""
+  local release_file=""
+
+  if [ -f "$FFMPEG_SRC_DIR/VERSION" ]; then
+    version_file=$(tr -d '\r\n' < "$FFMPEG_SRC_DIR/VERSION")
+  fi
+
+  if [ -f "$FFMPEG_SRC_DIR/RELEASE" ]; then
+    release_file=$(tr -d '\r\n' < "$FFMPEG_SRC_DIR/RELEASE")
+  fi
+
+  log "FFmpeg source metadata: VERSION='${version_file:-<missing>}' RELEASE='${release_file:-<missing>}'"
+}
+
+prepare_ffmpeg_source_version_metadata() {
+  local version=$1
+
+  if [ ! -d "$FFMPEG_SRC_DIR" ]; then
+    return
+  fi
+
+  if [ "$version" = "git" ]; then
+    rm -f "$FFMPEG_SRC_DIR/VERSION"
+    log "Using git snapshot source metadata"
+    log_ffmpeg_source_version_metadata
+    return
+  fi
+
+  local release_file=""
+  if [ -f "$FFMPEG_SRC_DIR/RELEASE" ]; then
+    release_file=$(tr -d '\r\n' < "$FFMPEG_SRC_DIR/RELEASE")
+  fi
+
+  if [ -n "$release_file" ] && [ "$release_file" != "$version" ]; then
+    log "Warning: requested FFmpeg version $version but existing source RELEASE is $release_file"
+  fi
+
+  printf '%s\n' "$version" > "$FFMPEG_SRC_DIR/VERSION"
+  log "Pinned FFmpeg source VERSION to $version"
+  log_ffmpeg_source_version_metadata
+}
+
+existing_ffmpeg_source_mismatches_version() {
+  local version=$1
+
+  if [ "$version" = "git" ]; then
+    return 1
+  fi
+
+  if [ ! -f "$FFMPEG_SRC_DIR/RELEASE" ]; then
+    return 1
+  fi
+
+  local release_file
+  release_file=$(tr -d '\r\n' < "$FFMPEG_SRC_DIR/RELEASE")
+  [ -n "$release_file" ] && [ "$release_file" != "$version" ]
+}
+
 # Prompt user to select FFmpeg version
 select_ffmpeg_version() {
   local SELECTED_VERSION=""
   
   # Check if version is provided via environment variable
   if [ -n "$FFMPEG_VERSION" ]; then
-    if [ "$FFMPEG_VERSION" = "latest" ] || [ "$FFMPEG_VERSION" = "git" ]; then
+    if [ "$FFMPEG_VERSION" = "git" ]; then
       echo "git"
+      return
+    elif [ "$FFMPEG_VERSION" = "latest" ]; then
+      local latest_release
+      latest_release=$(get_latest_ffmpeg_release)
+      if [ -z "$latest_release" ]; then
+        latest_release="8.0.1"
+      fi
+      echo "$latest_release"
       return
     else
       echo "$FFMPEG_VERSION"
@@ -40,23 +118,35 @@ select_ffmpeg_version() {
   
   # Check if running non-interactively (no TTY)
   if [ ! -t 0 ]; then
-    log "Non-interactive mode detected, using latest git"
-    echo "git"
+    local latest_release
+    latest_release=$(get_latest_ffmpeg_release)
+    if [ -z "$latest_release" ]; then
+      latest_release="8.0.1"
+    fi
+    log "Non-interactive mode detected, using latest stable release $latest_release"
+    echo "$latest_release"
     return
   fi
   
   # Interactive prompt (send prompts to stderr so stdout only contains version)
+  local latest_release
+  latest_release=$(get_latest_ffmpeg_release)
+  if [ -z "$latest_release" ]; then
+    latest_release="8.0.1"
+  fi
+
   echo "" >&2
   echo "Select FFmpeg version to build:" >&2
-  echo "  1) Latest Git (recommended for latest features)" >&2
+  echo "  1) Latest stable release ($latest_release, recommended)" >&2
   echo "  2) Stable version (choose from list)" >&2
+  echo "  3) Git snapshot" >&2
   echo "" >&2
-  printf "Enter choice [1-2] (default: 1): " >&2
+  printf "Enter choice [1-3] (default: 1): " >&2
   read choice < /dev/tty 2>/dev/null || read choice
   choice=${choice:-1}
   
   if [ "$choice" = "1" ]; then
-    echo "git"
+    echo "$latest_release"
     return
   fi
   
@@ -87,8 +177,12 @@ select_ffmpeg_version() {
       if [ $idx -ge 0 ] && [ $idx -lt ${#versions[@]} ]; then
         SELECTED_VERSION="${versions[$idx]}"
       else
-        log "Invalid selection, using latest git"
-        echo "git"
+        local latest_release="${versions[0]}"
+        if [ -z "$latest_release" ]; then
+          latest_release="8.0.1"
+        fi
+        log "Invalid selection, using latest stable release $latest_release"
+        echo "$latest_release"
         return
       fi
     else
@@ -96,24 +190,36 @@ select_ffmpeg_version() {
     fi
     
     echo "$SELECTED_VERSION"
-  else
-    log "Invalid choice, using latest git"
+  elif [ "$choice" = "3" ]; then
     echo "git"
+  else
+    log "Invalid choice, using latest stable release $latest_release"
+    echo "$latest_release"
   fi
 }
 
 # Download FFmpeg if not present
 download_ffmpeg() {
+  local VERSION
+  VERSION=$(select_ffmpeg_version)
+  log "Selected FFmpeg build version: $VERSION"
+
   if [ -f "$FFMPEG_SRC_DIR/configure" ]; then
-    log "FFmpeg source already present"
-    return 0
+    if existing_ffmpeg_source_mismatches_version "$VERSION"; then
+      local existing_release
+      existing_release=$(tr -d '\r\n' < "$FFMPEG_SRC_DIR/RELEASE")
+      log "Existing FFmpeg source RELEASE is $existing_release but $VERSION was requested"
+      log "Removing existing FFmpeg source and downloading the correct version"
+      rm -rf "$FFMPEG_SRC_DIR"
+    else
+      log "FFmpeg source already present, reusing existing source tree"
+      prepare_ffmpeg_source_version_metadata "$VERSION"
+      return 0
+    fi
   fi
   
   log_section "Downloading FFmpeg source"
   cd "$PROJECT_ROOT"
-  
-  # Select version
-  local VERSION=$(select_ffmpeg_version)
   
   if [ "$VERSION" = "git" ]; then
     log "Downloading latest FFmpeg from git..."
@@ -146,6 +252,7 @@ download_ffmpeg() {
     exit 1
   fi
   
+  prepare_ffmpeg_source_version_metadata "$VERSION"
   log "FFmpeg source downloaded successfully"
 }
 
@@ -155,6 +262,7 @@ build_ffmpeg_arch() {
   local PLATFORM=$2
 
   log_section "Building FFmpeg for $ARCH / $PLATFORM"
+  log_ffmpeg_source_version_metadata
 
   local SDK
   SDK=$(xcrun --sdk "$PLATFORM" --show-sdk-path)
@@ -320,4 +428,3 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   main "$@"
 fi
-

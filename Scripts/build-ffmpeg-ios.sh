@@ -17,7 +17,7 @@
 #   --ffmpeg-only   Only build FFmpeg (assumes LAME is already built)
 #   --xcf-only      Only create XCFramework (assumes FFmpeg is already built)
 #   --no-clean      Skip initial clean (for incremental builds)
-#   --version VER   FFmpeg version to build (e.g., "7.0", "git", or "latest")
+#   --version VER   FFmpeg version to build (e.g., "7.0", "latest", or "git")
 #   --help          Show this help message
 #
 set -e
