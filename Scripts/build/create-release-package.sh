@@ -50,6 +50,7 @@ cp "$PROJECT_ROOT/Package.swift" "$STAGING_DIR/"
 cp "$PROJECT_ROOT/LICENSE" "$STAGING_DIR/"
 cp "$PROJECT_ROOT/README.md" "$STAGING_DIR/"
 cp -R "$PROJECT_ROOT/Sources" "$STAGING_DIR/"
+cp -R "$PROJECT_ROOT/Tests" "$STAGING_DIR/"
 cp -R "$XCFRAMEWORK_PATH" "$STAGING_DIR/"
 find "$STAGING_DIR" -name .DS_Store -delete
 ditto -c -k --sequesterRsrc --keepParent "$STAGING_DIR" "$ASSET_PATH"

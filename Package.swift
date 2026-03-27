@@ -4,6 +4,7 @@ import PackageDescription
 
 let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 let localXCFrameworkPath = packageRoot.appendingPathComponent("FFmpeg.xcframework").path
+let testsPath = packageRoot.appendingPathComponent("Tests/SwiftFFmpegTests").path
 
 guard FileManager.default.fileExists(atPath: localXCFrameworkPath) else {
     fatalError(
@@ -14,7 +15,7 @@ guard FileManager.default.fileExists(atPath: localXCFrameworkPath) else {
     )
 }
 
-let package = Package(
+var package = Package(
     name: "SwiftFFmpeg",
     platforms: [
         .iOS(.v13)
@@ -60,11 +61,16 @@ let package = Package(
                 .linkedLibrary("bz2"),
                 .linkedLibrary("iconv")
             ]
-        ),
+        )
+    ]
+)
+
+if FileManager.default.fileExists(atPath: testsPath) {
+    package.targets.append(
         .testTarget(
             name: "SwiftFFmpegTests",
             dependencies: ["SwiftFFmpeg"],
             path: "Tests/SwiftFFmpegTests"
         )
-    ]
-)
+    )
+}
