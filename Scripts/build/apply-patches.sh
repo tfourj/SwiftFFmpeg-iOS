@@ -54,8 +54,6 @@ void ffprobe_reset(void);
 
 void ffprobe_reset(void)
 {
-    int i;
-
     do_analyze_frames = do_bitexact = 0;
     do_count_frames = do_count_packets = 0;
     do_read_frames = do_read_packets = 0;
@@ -82,8 +80,6 @@ void ffprobe_reset(void)
     av_freep(&read_intervals);
     read_intervals_nb = 0;
 
-    for (i = 0; i < FF_ARRAY_ELEMS(sections); i++)
-        av_dict_free(&sections[i].entries_to_show);
 }
 FFPROBE_RESET_EOF
   if [[ "$OSTYPE" == "darwin"* ]]; then
