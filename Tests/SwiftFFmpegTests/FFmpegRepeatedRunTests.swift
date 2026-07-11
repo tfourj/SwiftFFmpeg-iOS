@@ -20,6 +20,8 @@ final class FFmpegRepeatedRunTests: XCTestCase {
         ])
 
         for run in 1...10 {
+            _ = try SwiftFFmpeg.executeDetailed(["-nostdin", "-stats", "-loglevel", "info", "-bsfs"])
+            _ = try SwiftFFmpeg.executeDetailed(["-version"], tool: .ffprobe)
             let output = root.appendingPathComponent("merge-\(run).mp4").path
             let result = try SwiftFFmpeg.executeDetailed([
                 "-nostdin", "-y", "-i", video, "-i", audio,

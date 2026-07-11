@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <errno.h>
 
 // --- Forward declarations from FFmpeg (we don't include FFmpeg headers) ---
 
@@ -19,6 +20,7 @@ int ffprobe_main(int argc, char *argv[]);
 
 // Reset FFmpeg global state for re-entrant calls
 void ffmpeg_reset(void);
+void ffprobe_reset(void);
 
 // Set program name for library mode (from patched opt_common.c)
 void set_library_program_name(const char *name);
@@ -90,7 +92,7 @@ int ffmpeg_execute(int argc, char *argv[]) {
 
 int ffprobe_execute(int argc, char *argv[]) {
     ffmpeg_setup_logging_if_needed();
-    ffmpeg_reset();
+    ffprobe_reset();
     set_library_program_name("ffprobe");
     return ffprobe_main(argc, argv);
 }
@@ -187,7 +189,11 @@ static void *cancel_watcher_thread(void *arg) {
 static int execute_tool_main(int argc, char *argv[], int (*tool_main)(int, char *[]), const char *program_name) {
     ffmpeg_setup_logging_if_needed();
     ffmpeg_clear_cancel();
-    ffmpeg_reset();
+    if (strcmp(program_name, "ffprobe") == 0) {
+        ffprobe_reset();
+    } else {
+        ffmpeg_reset();
+    }
     set_library_program_name(program_name);
 
     atomic_int cancel_done = 0;
@@ -197,7 +203,24 @@ static int execute_tool_main(int argc, char *argv[], int (*tool_main)(int, char 
     pthread_t cancel_tid;
     int cancel_started = (pthread_create(&cancel_tid, NULL, cancel_watcher_thread, &cancel_ctx) == 0);
 
-    int exit_code = tool_main(argc, argv);
+    int exit_code;
+    if (strcmp(program_name, "ffmpeg") == 0) {
+        // FFmpeg's process-oriented startup banner is not re-entrant. Inject
+        // the public option for every embedded call while preserving argv[0].
+        char **embedded_argv = calloc((size_t)argc + 2, sizeof(*embedded_argv));
+        if (!embedded_argv) {
+            exit_code = -ENOMEM;
+        } else {
+            embedded_argv[0] = argv[0];
+            embedded_argv[1] = "-hide_banner";
+            for (int i = 1; i < argc; i++)
+                embedded_argv[i + 1] = argv[i];
+            exit_code = tool_main(argc + 1, embedded_argv);
+            free(embedded_argv);
+        }
+    } else {
+        exit_code = tool_main(argc, argv);
+    }
 
     atomic_store(&cancel_done, 1);
     if (cancel_started) {

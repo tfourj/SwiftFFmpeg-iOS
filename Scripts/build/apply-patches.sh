@@ -10,16 +10,23 @@ log_section "Applying patches to FFmpeg source"
 FFMPEG_C="$FFMPEG_SRC_DIR/fftools/ffmpeg.c"
 FFMPEG_H="$FFMPEG_SRC_DIR/fftools/ffmpeg.h"
 FFMPEG_OPT_C="$FFMPEG_SRC_DIR/fftools/ffmpeg_opt.c"
+FFPROBE_C="$FFMPEG_SRC_DIR/fftools/ffprobe.c"
 OPT_COMMON_C="$FFMPEG_SRC_DIR/fftools/opt_common.c"
 
 # Track if we need to apply any patches
 NEED_FFMPEG_PATCH=true
+NEED_FFPROBE_PATCH=true
 NEED_OPT_COMMON_PATCH=true
 
 # Check if ffmpeg.c patch is already applied
 if grep -q "ffmpeg_reset" "$FFMPEG_C" 2>/dev/null; then
   log "ffmpeg.c patch already applied"
   NEED_FFMPEG_PATCH=false
+fi
+
+if grep -q "void ffprobe_reset" "$FFPROBE_C" 2>/dev/null; then
+  log "ffprobe.c patch already applied"
+  NEED_FFPROBE_PATCH=false
 fi
 
 # Check if opt_common.c patch is already applied
@@ -29,9 +36,68 @@ if grep -q "library_program_name" "$OPT_COMMON_C" 2>/dev/null; then
 fi
 
 # Exit if all patches are already applied
-if [ "$NEED_FFMPEG_PATCH" = false ] && [ "$NEED_OPT_COMMON_PATCH" = false ]; then
+if [ "$NEED_FFMPEG_PATCH" = false ] && [ "$NEED_FFPROBE_PATCH" = false ] && [ "$NEED_OPT_COMMON_PATCH" = false ]; then
   log "All patches already applied, skipping..."
   exit 0
+fi
+
+# Reset FFprobe's file-scope option state before every embedded invocation.
+if [ "$NEED_FFPROBE_PATCH" = true ]; then
+  log "Patching ffprobe.c..."
+  cp "$FFPROBE_C" "$FFPROBE_C.orig"
+  FFPROBE_MARKER="static const OptionDef \*options;"
+  FFPROBE_RESET_FILE=$(mktemp)
+  cat > "$FFPROBE_RESET_FILE" << 'FFPROBE_RESET_EOF'
+
+// Reset command-line state for re-entrant library calls.
+void ffprobe_reset(void);
+
+void ffprobe_reset(void)
+{
+    int i;
+
+    do_analyze_frames = do_bitexact = 0;
+    do_count_frames = do_count_packets = 0;
+    do_read_frames = do_read_packets = 0;
+    do_show_chapters = do_show_error = do_show_format = 0;
+    do_show_frames = do_show_packets = do_show_programs = 0;
+    do_show_stream_groups = do_show_stream_group_components = 0;
+    do_show_streams = do_show_stream_disposition = 0;
+    do_show_stream_group_disposition = do_show_data = 0;
+    do_show_program_version = do_show_library_versions = 0;
+    do_show_pixel_formats = do_show_pixel_format_flags = 0;
+    do_show_pixel_format_components = do_show_log = 0;
+    do_show_chapter_tags = do_show_format_tags = do_show_frame_tags = 0;
+    do_show_program_tags = do_show_stream_group_tags = 0;
+    do_show_stream_tags = do_show_packet_tags = 0;
+    show_value_unit = use_value_prefix = 0;
+    use_byte_value_binary_prefix = use_value_sexagesimal_format = 0;
+    show_private_data = 1;
+    show_optional_fields = SHOW_OPTIONAL_FIELDS_AUTO;
+    find_stream_info = 1;
+
+    av_freep(&output_format);
+    av_freep(&stream_specifier);
+    av_freep(&show_data_hash);
+    av_freep(&read_intervals);
+    read_intervals_nb = 0;
+
+    for (i = 0; i < FF_ARRAY_ELEMS(sections); i++)
+        av_dict_free(&sections[i].entries_to_show);
+}
+FFPROBE_RESET_EOF
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "/$FFPROBE_MARKER/r $FFPROBE_RESET_FILE" "$FFPROBE_C"
+  else
+    sed -i "/$FFPROBE_MARKER/r $FFPROBE_RESET_FILE" "$FFPROBE_C"
+  fi
+  rm "$FFPROBE_RESET_FILE"
+  if ! grep -q "void ffprobe_reset" "$FFPROBE_C"; then
+    log "ERROR: Failed to patch ffprobe.c"
+    mv "$FFPROBE_C.orig" "$FFPROBE_C"
+    exit 1
+  fi
+  log "Successfully patched ffprobe.c"
 fi
 
 # Backup original files if needed
@@ -191,7 +257,9 @@ void ffmpeg_opt_reset(void)
     ignore_unknown_streams = 0;
     copy_unknown_streams = 0;
     recast_media = 0;
-    hide_banner = 0;
+    // Embedded calls should not enter FFmpeg's process-oriented banner path.
+    // Explicit listing/version options still print their requested output.
+    hide_banner = 1;
 }
 OPT_RESET_EOF
 
@@ -254,9 +322,9 @@ LIBRARY_NAME_EOF
   
   # Replace program_name with get_effective_program_name() in print_program_info
   if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' 's/"%s version " FFMPEG_VERSION, program_name/"%s version " FFMPEG_VERSION, get_effective_program_name()/g' "$OPT_COMMON_C"
+    sed -i '' 's/"%s version " FFMPEG_VERSION, indent, program_name/"%s%s version " FFMPEG_VERSION, indent, get_effective_program_name()/g' "$OPT_COMMON_C"
   else
-    sed -i 's/"%s version " FFMPEG_VERSION, program_name/"%s version " FFMPEG_VERSION, get_effective_program_name()/g' "$OPT_COMMON_C"
+    sed -i 's/"%s version " FFMPEG_VERSION, indent, program_name/"%s%s version " FFMPEG_VERSION, indent, get_effective_program_name()/g' "$OPT_COMMON_C"
   fi
   
   # Verify patch was applied
