@@ -23,9 +23,6 @@ void ffmpeg_reset(void);
 // Set program name for library mode (from patched opt_common.c)
 void set_library_program_name(const char *name);
 
-// Install FFmpeg CLI signal handlers.
-void term_init(void);
-
 // Request ffmpeg CLI termination without delivering a process signal.
 void term_exit(void);
 
@@ -192,7 +189,6 @@ static int execute_tool_main(int argc, char *argv[], int (*tool_main)(int, char 
     ffmpeg_clear_cancel();
     ffmpeg_reset();
     set_library_program_name(program_name);
-    term_init();
 
     atomic_int cancel_done = 0;
     cancel_watcher_ctx cancel_ctx = {

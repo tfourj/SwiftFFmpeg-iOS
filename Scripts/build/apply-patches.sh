@@ -9,6 +9,7 @@ log_section "Applying patches to FFmpeg source"
 
 FFMPEG_C="$FFMPEG_SRC_DIR/fftools/ffmpeg.c"
 FFMPEG_H="$FFMPEG_SRC_DIR/fftools/ffmpeg.h"
+FFMPEG_OPT_C="$FFMPEG_SRC_DIR/fftools/ffmpeg_opt.c"
 OPT_COMMON_C="$FFMPEG_SRC_DIR/fftools/opt_common.c"
 
 # Track if we need to apply any patches
@@ -84,6 +85,9 @@ void ffmpeg_reset(void)
     // Reset other globals that may persist
     vstats_file = NULL;
     progress_avio = NULL;
+
+    // Restore every command-line option to its process-start default.
+    ffmpeg_opt_reset();
 }
 RESET_FUNC_EOF
 
@@ -121,6 +125,9 @@ RESET_FUNC_EOF
 
 // Reset all global state for re-entrant calls (iOS library usage)
 void ffmpeg_reset(void);
+
+// Reset option globals owned by ffmpeg_opt.c.
+void ffmpeg_opt_reset(void);
 HEADER_DECL_EOF
 
   # Use sed to insert the declaration after the marker line
@@ -140,6 +147,67 @@ HEADER_DECL_EOF
   fi
 
   log "Successfully patched ffmpeg.h"
+
+  log "Patching ffmpeg_opt.c..."
+  cp "$FFMPEG_OPT_C" "$FFMPEG_OPT_C.orig"
+  OPT_RESET_MARKER="int recast_media = 0;"
+  OPT_RESET_FILE=$(mktemp)
+  cat > "$OPT_RESET_FILE" << 'OPT_RESET_EOF'
+
+void ffmpeg_opt_reset(void)
+{
+    filter_hw_device = NULL;
+    vstats_filename = NULL;
+    dts_delta_threshold = 10;
+    dts_error_threshold = 3600 * 30;
+#if FFMPEG_OPT_VSYNC
+    video_sync_method = VSYNC_AUTO;
+#endif
+    frame_drop_threshold = 0;
+    do_benchmark = 0;
+    do_benchmark_all = 0;
+    do_hex_dump = 0;
+    do_pkt_dump = 0;
+    copy_ts = 0;
+    start_at_zero = 0;
+    copy_tb = -1;
+    debug_ts = 0;
+    exit_on_error = 0;
+    abort_on_flags = 0;
+    print_stats = -1;
+    stdin_interaction = 1;
+    max_error_rate = 2.0 / 3;
+    filter_nbthreads = NULL;
+    filter_complex_nbthreads = 0;
+    filter_buffered_frames = 0;
+    vstats_version = 2;
+    print_graphs = 0;
+    print_graphs_file = NULL;
+    print_graphs_format = NULL;
+    auto_conversion_filters = 1;
+    stats_period = 500000;
+    file_overwrite = 0;
+    no_file_overwrite = 0;
+    ignore_unknown_streams = 0;
+    copy_unknown_streams = 0;
+    recast_media = 0;
+    hide_banner = 0;
+}
+OPT_RESET_EOF
+
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "/$OPT_RESET_MARKER/r $OPT_RESET_FILE" "$FFMPEG_OPT_C"
+  else
+    sed -i "/$OPT_RESET_MARKER/r $OPT_RESET_FILE" "$FFMPEG_OPT_C"
+  fi
+  rm "$OPT_RESET_FILE"
+
+  if ! grep -q "void ffmpeg_opt_reset" "$FFMPEG_OPT_C"; then
+    log "ERROR: Failed to patch ffmpeg_opt.c"
+    mv "$FFMPEG_OPT_C.orig" "$FFMPEG_OPT_C"
+    exit 1
+  fi
+  log "Successfully patched ffmpeg_opt.c"
 fi
 
 # ============================================================================
