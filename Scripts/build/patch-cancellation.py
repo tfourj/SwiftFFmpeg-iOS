@@ -6,10 +6,26 @@ import sys
 
 path = Path(sys.argv[1]) / "fftools" / "ffmpeg.c"
 source = path.read_text()
+old_declaration = (
+    "// The embedding wrapper owns this atomic cancellation state.\n"
+    "extern int ffmpeg_library_cancel_requested(void);"
+)
+declaration = (
+    "// Only the embedded CLI links against the application's wrapper.\n"
+    "#ifdef FFMPEG_LIBRARY_MODE\n"
+    "extern int ffmpeg_library_cancel_requested(void);\n"
+    "#else\n"
+    "static int ffmpeg_library_cancel_requested(void) { return 0; }\n"
+    "#endif"
+)
+
+# Upgrade source trees patched by the previous version as well as fresh sources.
+if old_declaration in source:
+    source = source.replace(old_declaration, declaration)
+
 replacements = {
     "static volatile int received_sigterm = 0;":
-        "// The embedding wrapper owns this atomic cancellation state.\n"
-        "extern int ffmpeg_library_cancel_requested(void);\n\n"
+        declaration + "\n\n"
         "static volatile int received_sigterm = 0;",
     "return received_nb_signals > atomic_load(&transcode_init_done);":
         "return ffmpeg_library_cancel_requested() ||\n"

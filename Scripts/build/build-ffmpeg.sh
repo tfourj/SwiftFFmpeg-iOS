@@ -376,11 +376,11 @@ build_cli_library() {
     -I"$FFMPEG_SRC_DIR/fftools"
   )
   
-  # Recompile ffmpeg.c with main renamed
+  # Enable the wrapper cancellation hook only in the embedded CLI object.
   log "Recompiling ffmpeg.c..."
   $COMPILER "${COMMON_COMPILE_FLAGS[@]}" \
     -c "$FFMPEG_SRC_DIR/fftools/ffmpeg.c" -o "$TEMP_DIR/ffmpeg.o" \
-    -Dmain=ffmpeg_main
+    -Dmain=ffmpeg_main -DFFMPEG_LIBRARY_MODE=1
   
   if [ ! -f "$TEMP_DIR/ffmpeg.o" ]; then
     log "Error: Failed to compile ffmpeg.c"
