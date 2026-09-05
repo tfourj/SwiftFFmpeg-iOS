@@ -8,6 +8,10 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Source directories
 FFMPEG_SRC_DIR="$PROJECT_ROOT/ffmpeg"
 LAME_SRC_DIR="$PROJECT_ROOT/lame"
+LIBVPX_VERSION="1.15.2"
+OPUS_VERSION="1.5.2"
+LIBVPX_SRC_DIR="$PROJECT_ROOT/libvpx-$LIBVPX_VERSION"
+OPUS_SRC_DIR="$PROJECT_ROOT/opus-$OPUS_VERSION"
 
 # Build directories
 BUILD_DIR="$PROJECT_ROOT/build"
@@ -39,6 +43,27 @@ COMMON_FFMPEG_FLAGS=(
   --enable-libmp3lame
   --enable-gpl
   --enable-pthreads
+)
+
+# Download pinned codec sources into a temporary directory and verify them before
+# exposing the source tree to subsequent builds.
+download_codec_source() (
+  set -euo pipefail
+  local name="$1" url="$2" checksum="$3" source_dir="$4"
+  if [ -d "$source_dir" ]; then
+    log "$name source already present: $source_dir"
+    return
+  fi
+  mkdir -p "$BUILD_DIR"
+  local download_dir
+  download_dir=$(mktemp -d "$BUILD_DIR/codec-source.XXXXXX")
+  trap 'rm -rf "$download_dir"' EXIT
+  log_section "Downloading $name source"
+  curl --fail --location --retry 3 "$url" -o "$download_dir/source.tar.gz"
+  printf '%s  %s\n' "$checksum" "$download_dir/source.tar.gz" | shasum -a 256 --check
+  mkdir "$download_dir/source"
+  tar -xzf "$download_dir/source.tar.gz" -C "$download_dir/source" --strip-components=1
+  mv "$download_dir/source" "$source_dir"
 )
 
 # Initialize report file

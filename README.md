@@ -54,6 +54,14 @@ Usage examples and API notes are in [USAGE.md](USAGE.md).
 - iOS 13.0+
 - Xcode 14+
 - macOS for local builds
+- CMake and pkg-config (`brew install cmake pkgconf`)
+
+## Codec Build Scripts
+
+`Scripts/build/build-libvpx.sh` builds libvpx 1.15.2 for VP8/VP9, and
+`Scripts/build/build-opus.sh` builds Opus 1.5.2. Both download checksum-verified
+sources and install separate static libraries for `iphoneos arm64` and
+`iphonesimulator arm64` under `install/`. They can also be run individually.
 
 ## License
 
