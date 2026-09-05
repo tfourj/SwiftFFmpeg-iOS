@@ -278,23 +278,31 @@ build_ffmpeg_arch() {
 
   local CC="$(xcrun --sdk $PLATFORM -f clang)"
   
-  # LAME paths
-  local LAME_PREFIX="$INSTALL_DIR/${ARCH}-${PLATFORM_SUFFIX}"
-  local LAME_CFLAGS="-I$LAME_PREFIX/include"
-  local LAME_LDFLAGS="-L$LAME_PREFIX/lib"
+  local library
+  for library in libmp3lame.a libvpx.a libopus.a; do
+    if [ ! -f "$PREFIX/lib/$library" ]; then
+      log "Error: missing $PREFIX/lib/$library; run ./Scripts/build-ffmpeg-ios.sh --codecs-only first"
+      exit 1
+    fi
+  done
+  local CODEC_CFLAGS="-I$PREFIX/include"
+  local CODEC_LDFLAGS="-L$PREFIX/lib"
   
+  # Restrict pkg-config to this target's libraries, never host Homebrew libraries.
   PKG_CONFIG_PATH="" \
-  CFLAGS="-arch $ARCH -isysroot $SDK -mios-version-min=$MIN_IOS_VERSION -target $TARGET_TRIPLE $LAME_CFLAGS" \
-  LDFLAGS="-arch $ARCH -isysroot $SDK -mios-version-min=$MIN_IOS_VERSION -target $TARGET_TRIPLE $LAME_LDFLAGS -lpthread" \
+  PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" PKG_CONFIG_SYSROOT_DIR="" \
+  CFLAGS="-arch $ARCH -isysroot $SDK -target $TARGET_TRIPLE $CODEC_CFLAGS" \
+  LDFLAGS="-arch $ARCH -isysroot $SDK -target $TARGET_TRIPLE $CODEC_LDFLAGS -lpthread" \
   "$FFMPEG_SRC_DIR/configure" \
     --prefix="$PREFIX" \
     "${COMMON_FFMPEG_FLAGS[@]}" \
     --target-os=darwin \
     --arch="$ARCH" \
     --enable-cross-compile \
+    --pkg-config-flags=--static \
     --cc="$CC -target $TARGET_TRIPLE" \
-    --extra-cflags="$LAME_CFLAGS" \
-    --extra-ldflags="$LAME_LDFLAGS -lpthread"
+    --extra-cflags="$CODEC_CFLAGS" \
+    --extra-ldflags="$CODEC_LDFLAGS -lpthread"
 
   make_with_report -j"$NUM_JOBS"
   make_with_report install

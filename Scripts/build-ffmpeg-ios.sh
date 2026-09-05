@@ -5,7 +5,7 @@
 # This script orchestrates the full build process:
 # 1. Downloads sources if needed
 # 2. Applies patches for iOS library usage
-# 3. Builds LAME (libmp3lame)
+# 3. Builds LAME, libvpx (VP8/VP9), and Opus
 # 4. Builds FFmpeg
 # 5. Creates XCFramework
 #
@@ -14,7 +14,8 @@
 # Options:
 #   --clean         Clean all build artifacts before building
 #   --lame-only     Only build LAME
-#   --ffmpeg-only   Only build FFmpeg (assumes LAME is already built)
+#   --codecs-only   Only build LAME, libvpx, and Opus
+#   --ffmpeg-only   Only build FFmpeg (assumes all codecs are already built)
 #   --xcf-only      Only create XCFramework (assumes FFmpeg is already built)
 #   --no-clean      Skip initial clean (for incremental builds)
 #   --version VER   FFmpeg version to build (e.g., "7.0", "latest", or "git")
@@ -31,6 +32,7 @@ init_report
 # Parse command line arguments
 CLEAN_BUILD=true
 BUILD_LAME=true
+BUILD_WEBM=true
 BUILD_FFMPEG=true
 CREATE_XCF=true
 FFMPEG_VERSION=""
@@ -47,12 +49,21 @@ while [[ $# -gt 0 ]]; do
       ;;
     --lame-only)
       BUILD_LAME=true
+      BUILD_WEBM=false
+      BUILD_FFMPEG=false
+      CREATE_XCF=false
+      shift
+      ;;
+    --codecs-only)
+      BUILD_LAME=true
+      BUILD_WEBM=true
       BUILD_FFMPEG=false
       CREATE_XCF=false
       shift
       ;;
     --ffmpeg-only)
       BUILD_LAME=false
+      BUILD_WEBM=false
       BUILD_FFMPEG=true
       CREATE_XCF=false
       CLEAN_BUILD=false
@@ -60,6 +71,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --xcf-only)
       BUILD_LAME=false
+      BUILD_WEBM=false
       BUILD_FFMPEG=false
       CREATE_XCF=true
       CLEAN_BUILD=false
@@ -71,7 +83,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --help|-h)
-      head -25 "$0" | tail -17
+      sed -n '/^# Usage:/,/^#   --help/p' "$0" | sed 's/^# *//'
       exit 0
       ;;
     *)
@@ -80,6 +92,14 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Check tools before removing any previous build artifacts.
+if [ "$BUILD_WEBM" = true ]; then
+  command -v cmake >/dev/null || { log "Error: install cmake (brew install cmake)"; exit 1; }
+fi
+if [ "$BUILD_FFMPEG" = true ]; then
+  command -v pkg-config >/dev/null || { log "Error: install pkg-config (brew install pkgconf)"; exit 1; }
+fi
 
 # Clean previous builds
 if [ "$CLEAN_BUILD" = true ]; then
@@ -94,6 +114,12 @@ mkdir -p "$BUILD_DIR" "$INSTALL_DIR" "$UMBRELLA_DIR"
 # Build LAME
 if [ "$BUILD_LAME" = true ]; then
   "$SCRIPT_DIR/build/build-lame.sh"
+fi
+
+# Build WebM video and audio codecs before FFmpeg.
+if [ "$BUILD_WEBM" = true ]; then
+  "$SCRIPT_DIR/build/build-libvpx.sh"
+  "$SCRIPT_DIR/build/build-opus.sh"
 fi
 
 # Build FFmpeg

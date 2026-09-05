@@ -41,6 +41,8 @@ COMMON_FFMPEG_FLAGS=(
   --disable-debug
   --enable-pic
   --enable-libmp3lame
+  --enable-libvpx
+  --enable-libopus
   --enable-gpl
   --enable-pthreads
 )

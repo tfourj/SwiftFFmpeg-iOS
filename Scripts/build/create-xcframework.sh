@@ -60,6 +60,8 @@ create_umbrella_libs() {
     "$INSTALL_DIR/arm64-ios/lib/libswresample.a" \
     "$INSTALL_DIR/arm64-ios/lib/libswscale.a" \
     "$INSTALL_DIR/arm64-ios/lib/libmp3lame.a" \
+    "$INSTALL_DIR/arm64-ios/lib/libvpx.a" \
+    "$INSTALL_DIR/arm64-ios/lib/libopus.a" \
     "$INSTALL_DIR/arm64-ios/lib/libffmpeg_cli.a"
 
   # iOS simulator arm64
@@ -72,6 +74,8 @@ create_umbrella_libs() {
     "$INSTALL_DIR/arm64-sim/lib/libswresample.a" \
     "$INSTALL_DIR/arm64-sim/lib/libswscale.a" \
     "$INSTALL_DIR/arm64-sim/lib/libmp3lame.a" \
+    "$INSTALL_DIR/arm64-sim/lib/libvpx.a" \
+    "$INSTALL_DIR/arm64-sim/lib/libopus.a" \
     "$INSTALL_DIR/arm64-sim/lib/libffmpeg_cli.a"
 
   log "Umbrella libraries created"
@@ -107,4 +111,3 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   main "$@"
 fi
-

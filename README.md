@@ -19,6 +19,7 @@ The release package already includes:
 - `Package.swift`
 - `Sources/`
 - `FFmpeg.xcframework`
+- `Licenses/` with libvpx and Opus license notices
 
 Use this option if you want to add the package without building FFmpeg locally.
 
@@ -44,6 +45,19 @@ Use `--version latest` to build the newest tagged FFmpeg release. Use `--version
 5. Select your local `SwiftFFmpeg-iOS` checkout.
 
 Use this option if you want to build FFmpeg yourself or work on the package locally.
+
+The full build includes LAME, libvpx, and Opus before building FFmpeg and packaging
+both arm64 platforms. Use `--codecs-only` to rebuild just those dependencies;
+`--ffmpeg-only` requires their installed libraries for both platforms.
+
+The resulting framework supports WebM encoding with `libvpx` (VP8),
+`libvpx-vp9` (VP9), and `libopus` (audio). For example, pass these arguments to
+`SwiftFFmpeg.executeDetailed`:
+
+```swift
+["-i", inputPath, "-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0",
+ "-c:a", "libopus", "-b:a", "128k", outputWebMPath]
+```
 
 ## Usage
 

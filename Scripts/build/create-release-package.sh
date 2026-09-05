@@ -52,6 +52,9 @@ cp "$PROJECT_ROOT/README.md" "$STAGING_DIR/"
 cp -R "$PROJECT_ROOT/Sources" "$STAGING_DIR/"
 cp -R "$PROJECT_ROOT/Tests" "$STAGING_DIR/"
 cp -R "$XCFRAMEWORK_PATH" "$STAGING_DIR/"
+mkdir -p "$STAGING_DIR/Licenses/libvpx" "$STAGING_DIR/Licenses/opus"
+cp "$LIBVPX_SRC_DIR/LICENSE" "$LIBVPX_SRC_DIR/PATENTS" "$LIBVPX_SRC_DIR/AUTHORS" "$STAGING_DIR/Licenses/libvpx/"
+cp "$OPUS_SRC_DIR/COPYING" "$STAGING_DIR/Licenses/opus/"
 find "$STAGING_DIR" -name .DS_Store -delete
 ditto -c -k --sequesterRsrc --keepParent "$STAGING_DIR" "$ASSET_PATH"
 
