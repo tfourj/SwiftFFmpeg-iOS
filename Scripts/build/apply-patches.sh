@@ -13,6 +13,9 @@ FFMPEG_OPT_C="$FFMPEG_SRC_DIR/fftools/ffmpeg_opt.c"
 FFPROBE_C="$FFMPEG_SRC_DIR/fftools/ffprobe.c"
 OPT_COMMON_C="$FFMPEG_SRC_DIR/fftools/opt_common.c"
 
+# Apply independently so existing source trees also receive the cancellation fix.
+python3 "$BUILD_SCRIPT_DIR/patch-cancellation.py" "$FFMPEG_SRC_DIR"
+
 # Track if we need to apply any patches
 NEED_FFMPEG_PATCH=true
 NEED_FFPROBE_PATCH=true

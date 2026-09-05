@@ -84,8 +84,6 @@ public enum SwiftFFmpeg {
 
     /// Execute FFmpeg or ffprobe with separate stdout and stderr capture.
     public static func executeDetailed(_ arguments: [String], tool: FFmpegTool = .ffmpeg) throws -> FFmpegExecutionResult {
-        ffmpeg_clear_cancel()
-
         let programName = tool == .ffmpeg ? "ffmpeg" : "ffprobe"
         let allArgs = [programName] + arguments
         var cArgs: [UnsafeMutablePointer<CChar>?] = allArgs.map { strdup($0) }

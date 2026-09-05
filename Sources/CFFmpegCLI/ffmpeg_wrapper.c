@@ -25,9 +25,6 @@ void ffprobe_reset(void);
 // Set program name for library mode (from patched opt_common.c)
 void set_library_program_name(const char *name);
 
-// Request ffmpeg CLI termination without delivering a process signal.
-void term_exit(void);
-
 // FFmpeg logging API
 void av_log_set_level(int level);
 
@@ -54,6 +51,11 @@ void ffmpeg_set_log_level(int level) {
 
 void ffmpeg_request_cancel(void) {
     atomic_store(&g_cancel_requested, 1);
+}
+
+// Polled by the patched FFmpeg scheduler and I/O interrupt callback.
+int ffmpeg_library_cancel_requested(void) {
+    return atomic_load(&g_cancel_requested);
 }
 
 void ffmpeg_clear_cancel(void) {
@@ -106,10 +108,6 @@ typedef struct {
     size_t total_read;
     int forward_to_logger;
 } output_reader_ctx;
-
-typedef struct {
-    atomic_int *done;
-} cancel_watcher_ctx;
 
 static void close_if_valid(int fd) {
     if (fd >= 0) {
@@ -165,27 +163,6 @@ static void *output_reader_thread(void *arg) {
     return NULL;
 }
 
-static void *cancel_watcher_thread(void *arg) {
-    cancel_watcher_ctx *ctx = (cancel_watcher_ctx *)arg;
-    int cancel_requested = 0;
-
-    while (!atomic_load(ctx->done)) {
-        if (!atomic_load(&g_cancel_requested)) {
-            usleep(20000);
-            continue;
-        }
-
-        if (!cancel_requested) {
-            term_exit();
-            cancel_requested = 1;
-        }
-
-        usleep(200000);
-    }
-
-    return NULL;
-}
-
 static int execute_tool_main(int argc, char *argv[], int (*tool_main)(int, char *[]), const char *program_name) {
     ffmpeg_setup_logging_if_needed();
     ffmpeg_clear_cancel();
@@ -195,13 +172,6 @@ static int execute_tool_main(int argc, char *argv[], int (*tool_main)(int, char 
         ffmpeg_reset();
     }
     set_library_program_name(program_name);
-
-    atomic_int cancel_done = 0;
-    cancel_watcher_ctx cancel_ctx = {
-        .done = &cancel_done
-    };
-    pthread_t cancel_tid;
-    int cancel_started = (pthread_create(&cancel_tid, NULL, cancel_watcher_thread, &cancel_ctx) == 0);
 
     int exit_code;
     if (strcmp(program_name, "ffmpeg") == 0) {
@@ -220,11 +190,6 @@ static int execute_tool_main(int argc, char *argv[], int (*tool_main)(int, char 
         }
     } else {
         exit_code = tool_main(argc, argv);
-    }
-
-    atomic_store(&cancel_done, 1);
-    if (cancel_started) {
-        pthread_join(cancel_tid, NULL);
     }
 
     ffmpeg_clear_cancel();

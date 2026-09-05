@@ -72,6 +72,13 @@ Usage examples and API notes are in [USAGE.md](USAGE.md).
 
 ## Codec Build Scripts
 
+`Scripts/build/patch-cancellation.py` connects FFmpeg's scheduler and I/O
+interrupt callback to the wrapper's atomic cancellation flag. It runs from
+`apply-patches.sh`, including on previously patched source trees. Rebuild the
+XCFramework and distribute it with the updated wrapper to activate this fix.
+Cancellation is checked every 20 ms between scheduler waits; an encoder already
+working on a frame must return before its worker can stop safely.
+
 `Scripts/build/build-libvpx.sh` builds libvpx 1.15.2 for VP8/VP9, and
 `Scripts/build/build-opus.sh` builds Opus 1.5.2. Both download checksum-verified
 sources and install separate static libraries for `iphoneos arm64` and
