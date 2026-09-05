@@ -78,6 +78,8 @@ interrupt callback to the wrapper's atomic cancellation flag. It runs from
 XCFramework and distribute it with the updated wrapper to activate this fix.
 Cancellation is checked every 20 ms between scheduler waits; an encoder already
 working on a frame must return before its worker can stop safely.
+Cancelled encoding skips queued frames and the final encoder flush, rather than
+draining the encoder's lookahead buffer before returning to the app.
 
 `Scripts/build/build-libvpx.sh` builds libvpx 1.15.2 for VP8/VP9, and
 `Scripts/build/build-opus.sh` builds Opus 1.5.2. Both download checksum-verified
