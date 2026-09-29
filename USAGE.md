@@ -112,3 +112,4 @@ Captured `stdout` and `stderr` are limited to 64 KB each. A longer `stderr` keep
 | `setLogLevel(FFmpegLogLevel)` | Set FFmpeg log verbosity. |
 | `setLogHandler((level, message) -> Void)` | Receive FFmpeg log messages. Pass `nil` to disable. |
 | `requestCancel()` | Request cancellation of the active ffmpeg or ffprobe execution. |
+| `buildCommit` | Short SwiftFFmpeg-iOS commit the linked `FFmpeg.xcframework` was built from, or `unknown` for older builds. |
