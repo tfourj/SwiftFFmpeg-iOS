@@ -22,6 +22,13 @@ final class FFmpegLibraryStateTests: XCTestCase {
         try? FileManager.default.removeItem(at: root)
     }
 
+    func testVersionBannerUsesEachToolName() throws {
+        let ffmpeg = try SwiftFFmpeg.executeDetailed(["-version"])
+        let ffprobe = try SwiftFFmpeg.executeDetailed(["-version"], tool: .ffprobe)
+        XCTAssertTrue(ffmpeg.stdout.hasPrefix("ffmpeg version "), ffmpeg.stdout)
+        XCTAssertTrue(ffprobe.stdout.hasPrefix("ffprobe version "), ffprobe.stdout)
+    }
+
     func testListingOptionsDoNotRedirectLaterLogsToStdout() throws {
         for listing in [["-version"], ["-bsfs"], ["-encoders"]] {
             _ = try SwiftFFmpeg.executeDetailed(listing)
