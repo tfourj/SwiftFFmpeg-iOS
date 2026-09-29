@@ -81,6 +81,26 @@ create_umbrella_libs() {
   log "Umbrella libraries created"
 }
 
+# Record the SwiftFFmpeg-iOS commit in the headers so apps can show which build
+# they link. "-dirty" marks uncommitted changes to tracked files.
+write_build_info_headers() {
+  local COMMIT="unknown"
+  if git -C "$PROJECT_ROOT" rev-parse --short HEAD >/dev/null 2>&1; then
+    COMMIT=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD)
+    if [ -n "$(git -C "$PROJECT_ROOT" status --porcelain --untracked-files=no)" ]; then
+      COMMIT="$COMMIT-dirty"
+    fi
+  fi
+
+  for INCLUDE_DIR in "$INSTALL_DIR/arm64-ios/include" "$INSTALL_DIR/arm64-sim/include"; do
+    cat > "$INCLUDE_DIR/swiftffmpeg_build_info.h" << BUILD_INFO_EOF
+#pragma once
+#define SWIFTFFMPEG_BUILD_COMMIT "$COMMIT"
+BUILD_INFO_EOF
+  done
+  log "SwiftFFmpeg build commit: $COMMIT"
+}
+
 # Create XCFramework
 create_xcframework() {
   log_section "Creating FFmpeg.xcframework"
@@ -101,6 +121,7 @@ create_xcframework() {
 # Main execution
 main() {
   create_umbrella_libs
+  write_build_info_headers
   create_xcframework
   
   log_section "XCFramework creation complete"
