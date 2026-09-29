@@ -99,6 +99,8 @@ try SwiftFFmpeg.execute([...])
 SwiftFFmpeg.setLogHandler(nil)
 ```
 
+Each call starts at the level set with `setLogLevel`. A `-v` or `-loglevel` argument applies to that call only.
+
 ## API Reference
 
 | Method | Description |
