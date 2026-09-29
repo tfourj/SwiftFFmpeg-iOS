@@ -16,6 +16,30 @@ OPT_COMMON_C="$FFMPEG_SRC_DIR/fftools/opt_common.c"
 # Apply independently so existing source trees also receive the cancellation fix.
 python3 "$BUILD_SCRIPT_DIR/patch-cancellation.py" "$FFMPEG_SRC_DIR"
 
+# Every tool shares one linked program_name, so the version banner must use the
+# name set by the wrapper. Apply independently so already patched trees get it.
+apply_program_name_banner_patch() {
+  if [ ! -f "$OPT_COMMON_C" ] || grep -q 'FFMPEG_VERSION, get_effective_program_name()' "$OPT_COMMON_C"; then
+    return
+  fi
+  if ! grep -q "get_effective_program_name(void)" "$OPT_COMMON_C"; then
+    return
+  fi
+
+  local BANNER_PATTERN='s/"%s version " FFMPEG_VERSION, program_name)/"%s version " FFMPEG_VERSION, get_effective_program_name())/'
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "$BANNER_PATTERN" "$OPT_COMMON_C"
+  else
+    sed -i "$BANNER_PATTERN" "$OPT_COMMON_C"
+  fi
+
+  if ! grep -q 'FFMPEG_VERSION, get_effective_program_name()' "$OPT_COMMON_C"; then
+    log "ERROR: Failed to patch the opt_common.c version banner"
+    exit 1
+  fi
+  log "Patched opt_common.c version banner"
+}
+
 # Track if we need to apply any patches
 NEED_FFMPEG_PATCH=true
 NEED_FFPROBE_PATCH=true
@@ -37,6 +61,8 @@ if grep -q "library_program_name" "$OPT_COMMON_C" 2>/dev/null; then
   log "opt_common.c patch already applied"
   NEED_OPT_COMMON_PATCH=false
 fi
+
+apply_program_name_banner_patch
 
 # Exit if all patches are already applied
 if [ "$NEED_FFMPEG_PATCH" = false ] && [ "$NEED_FFPROBE_PATCH" = false ] && [ "$NEED_OPT_COMMON_PATCH" = false ]; then
@@ -319,16 +345,10 @@ LIBRARY_NAME_EOF
   
   rm "$LIBRARY_NAME_FILE"
   
-  # Replace program_name with get_effective_program_name() in print_program_info
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' 's/"%s version " FFMPEG_VERSION, indent, program_name/"%s%s version " FFMPEG_VERSION, indent, get_effective_program_name()/g' "$OPT_COMMON_C"
-  else
-    sed -i 's/"%s version " FFMPEG_VERSION, indent, program_name/"%s%s version " FFMPEG_VERSION, indent, get_effective_program_name()/g' "$OPT_COMMON_C"
-  fi
-  
   # Verify patch was applied
   if grep -q "library_program_name" "$OPT_COMMON_C"; then
     log "Successfully patched opt_common.c"
+    apply_program_name_banner_patch
   else
     log "Warning: Failed to patch opt_common.c"
     mv "$OPT_COMMON_C.orig" "$OPT_COMMON_C"
