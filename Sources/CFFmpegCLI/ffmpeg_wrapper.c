@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <errno.h>
+#include <stdarg.h>
 
 // --- Forward declarations from FFmpeg (we don't include FFmpeg headers) ---
 
@@ -27,6 +28,8 @@ void set_library_program_name(const char *name);
 
 // FFmpeg logging API
 void av_log_set_level(int level);
+void av_log_set_callback(void (*callback)(void *, int, const char *, va_list));
+void av_log_default_callback(void *avcl, int level, const char *fmt, va_list vl);
 
 // --- Global state for Swift log callback ---
 
@@ -62,9 +65,7 @@ void ffmpeg_clear_cancel(void) {
     atomic_store(&g_cancel_requested, 0);
 }
 
-// --- Setup logging once ---
-
-static int g_logging_initialized = 0;
+// --- Logging state ---
 
 static ffmpeg_swift_log_func ffmpeg_copy_swift_logger(void) {
     ffmpeg_swift_log_func swift_log_func = NULL;
@@ -74,26 +75,25 @@ static ffmpeg_swift_log_func ffmpeg_copy_swift_logger(void) {
     return swift_log_func;
 }
 
-static void ffmpeg_setup_logging_if_needed(void) {
-    if (g_logging_initialized) {
-        return;
-    }
-    g_logging_initialized = 1;
-
+// Listing options such as -version and -bsfs install FFmpeg's help logger,
+// which prints every level to stdout, and -v changes the process-wide level.
+// A CLI process exits before either leaks, so start every call from defaults.
+static void ffmpeg_reset_logging(void) {
+    av_log_set_callback(av_log_default_callback);
     av_log_set_level(g_log_level);
 }
 
 // --- Main entrypoint used from Swift ---
 
 int ffmpeg_execute(int argc, char *argv[]) {
-    ffmpeg_setup_logging_if_needed();
+    ffmpeg_reset_logging();
     ffmpeg_reset();
     set_library_program_name("ffmpeg");
     return ffmpeg_main(argc, argv);
 }
 
 int ffprobe_execute(int argc, char *argv[]) {
-    ffmpeg_setup_logging_if_needed();
+    ffmpeg_reset_logging();
     ffprobe_reset();
     set_library_program_name("ffprobe");
     return ffprobe_main(argc, argv);
@@ -164,7 +164,7 @@ static void *output_reader_thread(void *arg) {
 }
 
 static int execute_tool_main(int argc, char *argv[], int (*tool_main)(int, char *[]), const char *program_name) {
-    ffmpeg_setup_logging_if_needed();
+    ffmpeg_reset_logging();
     ffmpeg_clear_cancel();
     if (strcmp(program_name, "ffprobe") == 0) {
         ffprobe_reset();
