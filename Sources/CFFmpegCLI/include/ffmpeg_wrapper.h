@@ -28,6 +28,10 @@ void ffmpeg_request_cancel(void);
 /// Clear any pending FFmpeg/ffprobe cancellation request.
 void ffmpeg_clear_cancel(void);
 
+/// Short SwiftFFmpeg-iOS commit the linked FFmpeg.xcframework was built from,
+/// with "-dirty" for uncommitted changes, or "unknown" for older builds.
+const char *ffmpeg_build_commit(void);
+
 /// Execute ffprobe as if calling its CLI.
 /// \param argc Number of arguments
 /// \param argv Array of C strings (argv[0] is normally "ffprobe")

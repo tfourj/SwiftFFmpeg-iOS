@@ -11,6 +11,14 @@
 #include <errno.h>
 #include <stdarg.h>
 
+// Generated into the xcframework headers by Scripts/build/create-xcframework.sh.
+#if __has_include(<swiftffmpeg_build_info.h>)
+#include <swiftffmpeg_build_info.h>
+#endif
+#ifndef SWIFTFFMPEG_BUILD_COMMIT
+#define SWIFTFFMPEG_BUILD_COMMIT "unknown"
+#endif
+
 // --- Forward declarations from FFmpeg (we don't include FFmpeg headers) ---
 
 // from fftools/ffmpeg.c compiled with -Dmain=ffmpeg_main
@@ -59,6 +67,10 @@ void ffmpeg_request_cancel(void) {
 // Polled by the patched FFmpeg scheduler and I/O interrupt callback.
 int ffmpeg_library_cancel_requested(void) {
     return atomic_load(&g_cancel_requested);
+}
+
+const char *ffmpeg_build_commit(void) {
+    return SWIFTFFMPEG_BUILD_COMMIT;
 }
 
 void ffmpeg_clear_cancel(void) {
