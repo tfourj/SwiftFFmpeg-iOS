@@ -59,6 +59,12 @@ public enum SwiftFFmpeg {
         ffmpeg_set_log_level(level.rawValue)
     }
 
+    /// Short SwiftFFmpeg-iOS commit the linked FFmpeg.xcframework was built from.
+    /// Ends in "-dirty" for uncommitted changes and is "unknown" for older builds.
+    public static var buildCommit: String {
+        String(cString: ffmpeg_build_commit())
+    }
+
     /// Request cancellation of the active ffmpeg or ffprobe execution.
     public static func requestCancel() {
         ffmpeg_request_cancel()

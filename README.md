@@ -40,6 +40,8 @@ cd SwiftFFmpeg-iOS
 
 Use `--version latest` to build the newest tagged FFmpeg release. Use `--version git` only if you explicitly want a git snapshot, which may report a commit-style version string in `ffmpeg --version`.
 
+The build records the repository's short commit in `FFmpeg.xcframework`, readable as `SwiftFFmpeg.buildCommit`. A `-dirty` suffix means tracked files had uncommitted changes. After changing only `Sources`, run `./Scripts/build-ffmpeg-ios.sh --xcf-only` to refresh it.
+
 3. In Xcode, open **File -> Add Package Dependencies...**
 4. Click **Add Local...**
 5. Select your local `SwiftFFmpeg-iOS` checkout.

@@ -99,6 +99,10 @@ try SwiftFFmpeg.execute([...])
 SwiftFFmpeg.setLogHandler(nil)
 ```
 
+Each call starts at the level set with `setLogLevel`. A `-v` or `-loglevel` argument applies to that call only.
+
+Captured `stdout` and `stderr` are limited to 64 KB each. A longer `stderr` keeps its start and end with a `[... N bytes truncated ...]` line between them, so the final error stays available.
+
 ## API Reference
 
 | Method | Description |
@@ -108,3 +112,4 @@ SwiftFFmpeg.setLogHandler(nil)
 | `setLogLevel(FFmpegLogLevel)` | Set FFmpeg log verbosity. |
 | `setLogHandler((level, message) -> Void)` | Receive FFmpeg log messages. Pass `nil` to disable. |
 | `requestCancel()` | Request cancellation of the active ffmpeg or ffprobe execution. |
+| `buildCommit` | Short SwiftFFmpeg-iOS commit the linked `FFmpeg.xcframework` was built from, or `unknown` for older builds. |
