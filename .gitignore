@@ -8,6 +8,7 @@ ffmpeg/
 /opus-*
 /dav1d-*
 /libwebp-*
+/soxr-*
 build-report.txt
 .DS_Store
 Scripts/.DS_Store
