@@ -52,9 +52,13 @@ cp "$PROJECT_ROOT/README.md" "$STAGING_DIR/"
 cp -R "$PROJECT_ROOT/Sources" "$STAGING_DIR/"
 cp -R "$PROJECT_ROOT/Tests" "$STAGING_DIR/"
 cp -R "$XCFRAMEWORK_PATH" "$STAGING_DIR/"
-mkdir -p "$STAGING_DIR/Licenses/libvpx" "$STAGING_DIR/Licenses/opus"
+mkdir -p "$STAGING_DIR/Licenses/libvpx" "$STAGING_DIR/Licenses/opus" "$STAGING_DIR/Licenses/dav1d" \
+  "$STAGING_DIR/Licenses/libwebp" "$STAGING_DIR/Licenses/soxr"
 cp "$LIBVPX_SRC_DIR/LICENSE" "$LIBVPX_SRC_DIR/PATENTS" "$LIBVPX_SRC_DIR/AUTHORS" "$STAGING_DIR/Licenses/libvpx/"
 cp "$OPUS_SRC_DIR/COPYING" "$STAGING_DIR/Licenses/opus/"
+cp "$DAV1D_SRC_DIR/COPYING" "$STAGING_DIR/Licenses/dav1d/"
+cp "$LIBWEBP_SRC_DIR/COPYING" "$LIBWEBP_SRC_DIR/PATENTS" "$LIBWEBP_SRC_DIR/AUTHORS" "$STAGING_DIR/Licenses/libwebp/"
+cp "$SOXR_SRC_DIR/LICENCE" "$SOXR_SRC_DIR/COPYING.LGPL" "$STAGING_DIR/Licenses/soxr/"
 find "$STAGING_DIR" -name .DS_Store -delete
 ditto -c -k --sequesterRsrc --keepParent "$STAGING_DIR" "$ASSET_PATH"
 
