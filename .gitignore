@@ -7,6 +7,7 @@ ffmpeg/
 /libvpx-*
 /opus-*
 /dav1d-*
+/libwebp-*
 build-report.txt
 .DS_Store
 Scripts/.DS_Store
