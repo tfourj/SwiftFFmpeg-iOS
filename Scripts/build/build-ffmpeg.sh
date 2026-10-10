@@ -279,7 +279,8 @@ build_ffmpeg_arch() {
   local CC="$(xcrun --sdk $PLATFORM -f clang)"
   
   local library
-  for library in libmp3lame.a libvpx.a libopus.a; do
+  for library in libmp3lame.a libvpx.a libopus.a libdav1d.a \
+    libwebp.a libwebpmux.a libsharpyuv.a libsoxr.a; do
     if [ ! -f "$PREFIX/lib/$library" ]; then
       log "Error: missing $PREFIX/lib/$library; run ./Scripts/build-ffmpeg-ios.sh --codecs-only first"
       exit 1

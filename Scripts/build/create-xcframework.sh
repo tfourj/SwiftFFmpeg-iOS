@@ -62,6 +62,11 @@ create_umbrella_libs() {
     "$INSTALL_DIR/arm64-ios/lib/libmp3lame.a" \
     "$INSTALL_DIR/arm64-ios/lib/libvpx.a" \
     "$INSTALL_DIR/arm64-ios/lib/libopus.a" \
+    "$INSTALL_DIR/arm64-ios/lib/libdav1d.a" \
+    "$INSTALL_DIR/arm64-ios/lib/libwebp.a" \
+    "$INSTALL_DIR/arm64-ios/lib/libwebpmux.a" \
+    "$INSTALL_DIR/arm64-ios/lib/libsharpyuv.a" \
+    "$INSTALL_DIR/arm64-ios/lib/libsoxr.a" \
     "$INSTALL_DIR/arm64-ios/lib/libffmpeg_cli.a"
 
   # iOS simulator arm64
@@ -76,6 +81,11 @@ create_umbrella_libs() {
     "$INSTALL_DIR/arm64-sim/lib/libmp3lame.a" \
     "$INSTALL_DIR/arm64-sim/lib/libvpx.a" \
     "$INSTALL_DIR/arm64-sim/lib/libopus.a" \
+    "$INSTALL_DIR/arm64-sim/lib/libdav1d.a" \
+    "$INSTALL_DIR/arm64-sim/lib/libwebp.a" \
+    "$INSTALL_DIR/arm64-sim/lib/libwebpmux.a" \
+    "$INSTALL_DIR/arm64-sim/lib/libsharpyuv.a" \
+    "$INSTALL_DIR/arm64-sim/lib/libsoxr.a" \
     "$INSTALL_DIR/arm64-sim/lib/libffmpeg_cli.a"
 
   log "Umbrella libraries created"
