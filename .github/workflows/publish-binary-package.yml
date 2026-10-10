@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install codec build tools
-        run: brew install cmake pkgconf
+        run: brew install cmake pkgconf meson ninja
 
       - name: Build FFmpeg xcframework
         run: ./Scripts/build-ffmpeg-ios.sh --version 8.1
