@@ -5,7 +5,7 @@
 # This script orchestrates the full build process:
 # 1. Downloads sources if needed
 # 2. Applies patches for iOS library usage
-# 3. Builds LAME, libvpx (VP8/VP9), and Opus
+# 3. Builds LAME, libvpx (VP8/VP9), Opus, dav1d, libwebp, and soxr
 # 4. Builds FFmpeg
 # 5. Creates XCFramework
 #
@@ -14,7 +14,7 @@
 # Options:
 #   --clean         Clean all build artifacts before building
 #   --lame-only     Only build LAME
-#   --codecs-only   Only build LAME, libvpx, and Opus
+#   --codecs-only   Only build LAME, libvpx, Opus, dav1d, libwebp, and soxr
 #   --ffmpeg-only   Only build FFmpeg (assumes all codecs are already built)
 #   --xcf-only      Only create XCFramework (assumes FFmpeg is already built)
 #   --no-clean      Skip initial clean (for incremental builds)
@@ -96,6 +96,8 @@ done
 # Check tools before removing any previous build artifacts.
 if [ "$BUILD_CODECS" = true ]; then
   command -v cmake >/dev/null || { log "Error: install cmake (brew install cmake)"; exit 1; }
+  command -v meson >/dev/null || { log "Error: install meson (brew install meson ninja)"; exit 1; }
+  command -v ninja >/dev/null || { log "Error: install ninja (brew install meson ninja)"; exit 1; }
 fi
 if [ "$BUILD_FFMPEG" = true ]; then
   command -v pkg-config >/dev/null || { log "Error: install pkg-config (brew install pkgconf)"; exit 1; }
@@ -116,10 +118,13 @@ if [ "$BUILD_LAME" = true ]; then
   "$SCRIPT_DIR/build/build-lame.sh"
 fi
 
-# Build WebM video and audio codecs before FFmpeg.
+# Build external codec libraries before FFmpeg.
 if [ "$BUILD_CODECS" = true ]; then
   "$SCRIPT_DIR/build/build-libvpx.sh"
   "$SCRIPT_DIR/build/build-opus.sh"
+  "$SCRIPT_DIR/build/build-dav1d.sh"
+  "$SCRIPT_DIR/build/build-libwebp.sh"
+  "$SCRIPT_DIR/build/build-soxr.sh"
 fi
 
 # Build FFmpeg
