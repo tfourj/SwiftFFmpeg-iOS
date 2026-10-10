@@ -32,7 +32,7 @@ init_report
 # Parse command line arguments
 CLEAN_BUILD=true
 BUILD_LAME=true
-BUILD_WEBM=true
+BUILD_CODECS=true
 BUILD_FFMPEG=true
 CREATE_XCF=true
 FFMPEG_VERSION=""
@@ -49,21 +49,21 @@ while [[ $# -gt 0 ]]; do
       ;;
     --lame-only)
       BUILD_LAME=true
-      BUILD_WEBM=false
+      BUILD_CODECS=false
       BUILD_FFMPEG=false
       CREATE_XCF=false
       shift
       ;;
     --codecs-only)
       BUILD_LAME=true
-      BUILD_WEBM=true
+      BUILD_CODECS=true
       BUILD_FFMPEG=false
       CREATE_XCF=false
       shift
       ;;
     --ffmpeg-only)
       BUILD_LAME=false
-      BUILD_WEBM=false
+      BUILD_CODECS=false
       BUILD_FFMPEG=true
       CREATE_XCF=false
       CLEAN_BUILD=false
@@ -71,7 +71,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --xcf-only)
       BUILD_LAME=false
-      BUILD_WEBM=false
+      BUILD_CODECS=false
       BUILD_FFMPEG=false
       CREATE_XCF=true
       CLEAN_BUILD=false
@@ -94,7 +94,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Check tools before removing any previous build artifacts.
-if [ "$BUILD_WEBM" = true ]; then
+if [ "$BUILD_CODECS" = true ]; then
   command -v cmake >/dev/null || { log "Error: install cmake (brew install cmake)"; exit 1; }
 fi
 if [ "$BUILD_FFMPEG" = true ]; then
@@ -117,7 +117,7 @@ if [ "$BUILD_LAME" = true ]; then
 fi
 
 # Build WebM video and audio codecs before FFmpeg.
-if [ "$BUILD_WEBM" = true ]; then
+if [ "$BUILD_CODECS" = true ]; then
   "$SCRIPT_DIR/build/build-libvpx.sh"
   "$SCRIPT_DIR/build/build-opus.sh"
 fi
