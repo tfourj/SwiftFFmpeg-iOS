@@ -44,7 +44,8 @@ var package = Package(
                 .linkedFramework("VideoToolbox"),
                 .linkedLibrary("z"),
                 .linkedLibrary("bz2"),
-                .linkedLibrary("iconv")
+                .linkedLibrary("iconv"),
+                .linkedLibrary("xml2")
             ]
         ),
         // Swift wrapper you'll use in your app
@@ -59,7 +60,8 @@ var package = Package(
                 .linkedFramework("VideoToolbox"),
                 .linkedLibrary("z"),
                 .linkedLibrary("bz2"),
-                .linkedLibrary("iconv")
+                .linkedLibrary("iconv"),
+                .linkedLibrary("xml2")
             ]
         )
     ]

@@ -52,6 +52,7 @@ COMMON_FFMPEG_FLAGS=(
   --enable-libdav1d
   --enable-libwebp
   --enable-libsoxr
+  --enable-libxml2
   --enable-gpl
   --enable-pthreads
 )

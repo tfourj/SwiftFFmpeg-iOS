@@ -256,6 +256,23 @@ download_ffmpeg() {
   log "FFmpeg source downloaded successfully"
 }
 
+# Describe the SDK's libxml2 for pkg-config so FFmpeg links the system library.
+write_sdk_libxml2_pc() {
+  local SDK=$1
+  local PREFIX=$2
+  local VERSION
+  VERSION=$(sed -n 's/^#define LIBXML_DOTTED_VERSION "\(.*\)"/\1/p' \
+    "$SDK/usr/include/libxml2/libxml/xmlversion.h")
+  mkdir -p "$PREFIX/lib/pkgconfig"
+  cat > "$PREFIX/lib/pkgconfig/libxml-2.0.pc" << LIBXML_PC_EOF
+Name: libXML
+Description: libxml2 from the iOS SDK
+Version: $VERSION
+Libs: -lxml2
+Cflags: -I$SDK/usr/include/libxml2
+LIBXML_PC_EOF
+}
+
 # Build FFmpeg for a specific architecture
 build_ffmpeg_arch() {
   local ARCH=$1
@@ -286,6 +303,7 @@ build_ffmpeg_arch() {
       exit 1
     fi
   done
+  write_sdk_libxml2_pc "$SDK" "$PREFIX"
   local CODEC_CFLAGS="-I$PREFIX/include"
   local CODEC_LDFLAGS="-L$PREFIX/lib"
   
